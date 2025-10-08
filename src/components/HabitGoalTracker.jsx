@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Check, Circle, Plus, X, ChevronRight, Home, Target, Calendar, CheckSquare, Edit2, Trash2, Download, Upload, TrendingUp, ChevronLeft } from 'lucide-react';
+import { Check, Circle, Plus, X, ChevronRight, Home, Target, Calendar, CheckSquare, Edit2, Trash2, Download, Upload, TrendingUp, ChevronLeft, User } from 'lucide-react';
+import dataService from '../services/dataService';
+import UserManager from './UserManager';
 
 const HabitGoalTracker = () => {
   const [currentView, setCurrentView] = useState('dashboard');
@@ -10,6 +12,8 @@ const HabitGoalTracker = () => {
   const [selectedRoutineForHabit, setSelectedRoutineForHabit] = useState(null);
   const [selectedGoalForTask, setSelectedGoalForTask] = useState(null);
   const [showDataMenu, setShowDataMenu] = useState(false);
+  const [showUserManager, setShowUserManager] = useState(false);
+  const [currentUser, setCurrentUser] = useState(null);
   
   // Sample motivational quotes
   const quotes = [
@@ -33,43 +37,43 @@ const HabitGoalTracker = () => {
     { virtue: "Humble", focus: "A Good Man Is Humble. Serve others before yourself this week." }
   ];
   
-  // Initial state for routines
-  const [routines, setRoutines] = useState([
-    {
-      id: 1,
-      name: "Morning Routine",
-      timeOfDay: "morning",
-      days: ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"],
-      habits: []
-    },
-    {
-      id: 2,
-      name: "Afternoon Routine",
-      timeOfDay: "afternoon",
-      days: ["monday", "tuesday", "wednesday", "thursday", "friday"],
-      habits: []
-    },
-    {
-      id: 3,
-      name: "Evening Routine",
-      timeOfDay: "evening",
-      days: ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"],
-      habits: []
-    }
-  ]);
-  
-  // Initial state for habits
+  // State for data - initialized from data service
+  const [routines, setRoutines] = useState([]);
   const [habits, setHabits] = useState([]);
-  
-  // Initial state for goals
   const [goals, setGoals] = useState([]);
-  
-  // Daily todo list
   const [todos, setTodos] = useState([]);
-  
-  // Habit completions (date -> habitId -> boolean)
   const [habitCompletions, setHabitCompletions] = useState({});
   
+  // Initialize data from data service
+  useEffect(() => {
+    const user = dataService.getCurrentUser();
+    if (user) {
+      setCurrentUser(user);
+      loadUserData();
+    } else {
+      // No user found, show user manager
+      setShowUserManager(true);
+    }
+  }, []);
+
+  // Load user data from data service
+  const loadUserData = () => {
+    setRoutines(dataService.getRoutines());
+    setHabits(dataService.getHabits());
+    setGoals(dataService.getGoals());
+    setTodos(dataService.getTodos());
+    setHabitCompletions(dataService.getHabitCompletions());
+  };
+
+  // Handle user selection
+  const handleUserSelect = (user) => {
+    setCurrentUser(user);
+    if (user) {
+      loadUserData();
+      setShowUserManager(false);
+    }
+  };
+
   // Close data menu when clicking outside
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -361,13 +365,15 @@ const HabitGoalTracker = () => {
   // Toggle habit completion
   const toggleHabitCompletion = (habitId) => {
     const today = getTodayString();
-    setHabitCompletions(prev => ({
-      ...prev,
+    const newHabitCompletions = {
+      ...habitCompletions,
       [today]: {
-        ...(prev[today] || {}),
-        [habitId]: !(prev[today]?.[habitId] || false)
+        ...(habitCompletions[today] || {}),
+        [habitId]: !(habitCompletions[today]?.[habitId] || false)
       }
-    }));
+    };
+    setHabitCompletions(newHabitCompletions);
+    dataService.updateHabitCompletions(newHabitCompletions);
   };
   
   // Calculate habit streak
@@ -397,12 +403,16 @@ const HabitGoalTracker = () => {
       routineId: routineId,
       createdAt: new Date().toISOString()
     };
-    setHabits([...habits, newHabit]);
-    setRoutines(routines.map(r => 
+    const newHabits = [...habits, newHabit];
+    const newRoutines = routines.map(r => 
       r.id === routineId 
         ? { ...r, habits: [...r.habits, newHabit.id] }
         : r
-    ));
+    );
+    setHabits(newHabits);
+    setRoutines(newRoutines);
+    dataService.updateHabits(newHabits);
+    dataService.updateRoutines(newRoutines);
   };
   
   // Add goal
@@ -414,21 +424,25 @@ const HabitGoalTracker = () => {
       completed: false,
       createdAt: new Date().toISOString()
     };
-    setGoals([...goals, newGoal]);
+    const newGoals = [...goals, newGoal];
+    setGoals(newGoals);
+    dataService.updateGoals(newGoals);
   };
   
   // Add task to goal
   const addTaskToGoal = (goalId, taskName) => {
-    setGoals(goals.map(g => 
+    const newGoals = goals.map(g => 
       g.id === goalId
         ? { ...g, tasks: [...g.tasks, { id: Date.now(), name: taskName, completed: false }] }
         : g
-    ));
+    );
+    setGoals(newGoals);
+    dataService.updateGoals(newGoals);
   };
   
   // Toggle task completion
   const toggleTaskCompletion = (goalId, taskId) => {
-    setGoals(goals.map(g => 
+    const newGoals = goals.map(g => 
       g.id === goalId
         ? {
             ...g,
@@ -437,7 +451,9 @@ const HabitGoalTracker = () => {
             )
           }
         : g
-    ));
+    );
+    setGoals(newGoals);
+    dataService.updateGoals(newGoals);
   };
   
   // Add task to daily todo
@@ -449,7 +465,9 @@ const HabitGoalTracker = () => {
       goalId: goalId,
       addedAt: getTodayString()
     };
-    setTodos([...todos, newTodo]);
+    const newTodos = [...todos, newTodo];
+    setTodos(newTodos);
+    dataService.updateTodos(newTodos);
   };
   
   // Add custom todo
@@ -461,41 +479,38 @@ const HabitGoalTracker = () => {
       goalId: goalId,
       addedAt: getTodayString()
     };
-    setTodos([...todos, newTodo]);
+    const newTodos = [...todos, newTodo];
+    setTodos(newTodos);
+    dataService.updateTodos(newTodos);
   };
   
   // Toggle todo completion
   const toggleTodoCompletion = (todoId) => {
-    setTodos(todos.map(t => 
+    const newTodos = todos.map(t => 
       t.id === todoId ? { ...t, completed: !t.completed } : t
-    ));
+    );
+    setTodos(newTodos);
+    dataService.updateTodos(newTodos);
   };
   
   // Delete todo
   const deleteTodo = (todoId) => {
-    setTodos(todos.filter(t => t.id !== todoId));
+    const newTodos = todos.filter(t => t.id !== todoId);
+    setTodos(newTodos);
+    dataService.updateTodos(newTodos);
   };
   
   // Export data to JSON file
   const exportData = () => {
-    const data = {
-      version: "1.0",
-      exportDate: new Date().toISOString(),
-      userData: {
-        routines,
-        habits,
-        goals,
-        todos,
-        habitCompletions
-      }
-    };
+    const data = dataService.exportUserData();
+    if (!data) return;
     
     const jsonString = JSON.stringify(data, null, 2);
     const blob = new Blob([jsonString], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `growth-tracker-backup-${new Date().toISOString().split('T')[0]}.json`;
+    link.download = `growth-tracker-backup-${currentUser?.name || 'user'}-${new Date().toISOString().split('T')[0]}.json`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -512,15 +527,12 @@ const HabitGoalTracker = () => {
       try {
         const data = JSON.parse(e.target.result);
         
-        if (data.userData) {
-          if (data.userData.routines) setRoutines(data.userData.routines);
-          if (data.userData.habits) setHabits(data.userData.habits);
-          if (data.userData.goals) setGoals(data.userData.goals);
-          if (data.userData.todos) setTodos(data.userData.todos);
-          if (data.userData.habitCompletions) setHabitCompletions(data.userData.habitCompletions);
-          
+        if (dataService.importUserData(data)) {
+          loadUserData(); // Reload data from service
           alert('Data imported successfully!');
           setShowDataMenu(false);
+        } else {
+          alert('Error importing data. Please check the file format.');
         }
       } catch (error) {
         alert('Error importing data. Please check the file format.');
@@ -1119,8 +1131,19 @@ const HabitGoalTracker = () => {
             <div>
               <h1 className="text-2xl font-bold tracking-tight text-[#333333]">GROWTH TRACKER</h1>
               <p className="text-sm text-[#333333] opacity-70 font-mono">{currentDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }).toUpperCase()}</p>
+              {currentUser && (
+                <p className="text-xs text-[#333333] opacity-50 font-mono">User: {currentUser.name}</p>
+              )}
             </div>
-            <div className="relative data-menu-container">
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setShowUserManager(true)}
+                className="p-2 hover:bg-stone-100 rounded-lg transition-colors"
+                title="Manage Users"
+              >
+                <User size={20} strokeWidth={2.5} className="text-[#333333]" />
+              </button>
+              <div className="relative data-menu-container">
               <button
                 onClick={() => setShowDataMenu(!showDataMenu)}
                 className="p-2 hover:bg-stone-100 rounded-lg transition-colors"
@@ -1171,6 +1194,13 @@ const HabitGoalTracker = () => {
         <Navigation />
         
         {/* Modals */}
+        {showUserManager && (
+          <UserManager 
+            onUserSelect={handleUserSelect}
+            onClose={() => setShowUserManager(false)} 
+          />
+        )}
+        
         {showHabitModal && (
           <HabitModal 
             routineId={selectedRoutineForHabit} 
