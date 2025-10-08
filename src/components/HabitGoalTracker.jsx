@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Check, Circle, Plus, X, ChevronRight, Home, Target, Calendar, CheckSquare, Edit2, Trash2, Download, Upload, TrendingUp, ChevronLeft, User } from 'lucide-react';
 import dataService from '../services/dataService';
 import UserManager from './UserManager';
+import { debugStorage, addTestData } from '../utils/debugStorage';
 
 const HabitGoalTracker = () => {
   const [currentView, setCurrentView] = useState('dashboard');
@@ -46,6 +47,9 @@ const HabitGoalTracker = () => {
   
   // Initialize data from data service
   useEffect(() => {
+    // Debug localStorage on startup
+    debugStorage();
+    
     const user = dataService.getCurrentUser();
     if (user) {
       setCurrentUser(user);
@@ -174,7 +178,9 @@ const HabitGoalTracker = () => {
           completed: false,
           createdAt: new Date().toISOString()
         };
-        setGoals([...goals, newGoal]);
+        const newGoals = [...goals, newGoal];
+        setGoals(newGoals);
+        dataService.updateGoals(newGoals);
         onClose();
       }
     };
@@ -251,7 +257,7 @@ const HabitGoalTracker = () => {
     
     const handleSubmit = () => {
       if (taskName.trim()) {
-        setGoals(goals.map(g => 
+        const newGoals = goals.map(g => 
           g.id === goalId
             ? { 
                 ...g, 
@@ -263,7 +269,9 @@ const HabitGoalTracker = () => {
                 }] 
               }
             : g
-        ));
+        );
+        setGoals(newGoals);
+        dataService.updateGoals(newGoals);
         onClose();
       }
     };
@@ -1137,6 +1145,17 @@ const HabitGoalTracker = () => {
             </div>
             <div className="flex items-center gap-2">
               <button
+                onClick={() => {
+                  debugStorage();
+                  addTestData();
+                  window.location.reload();
+                }}
+                className="p-2 hover:bg-stone-100 rounded-lg transition-colors bg-yellow-100"
+                title="Debug Storage"
+              >
+                🐛
+              </button>
+              <button
                 onClick={() => setShowUserManager(true)}
                 className="p-2 hover:bg-stone-100 rounded-lg transition-colors"
                 title="Manage Users"
@@ -1144,41 +1163,42 @@ const HabitGoalTracker = () => {
                 <User size={20} strokeWidth={2.5} className="text-[#333333]" />
               </button>
               <div className="relative data-menu-container">
-              <button
-                onClick={() => setShowDataMenu(!showDataMenu)}
-                className="p-2 hover:bg-stone-100 rounded-lg transition-colors"
-              >
-                <div className="flex flex-col gap-1">
-                  <div className="w-5 h-0.5 bg-[#333333]"></div>
-                  <div className="w-5 h-0.5 bg-[#333333]"></div>
-                  <div className="w-5 h-0.5 bg-[#333333]"></div>
-                </div>
-              </button>
-              
-              {showDataMenu && (
-                <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-xl border-2 border-stone-200 z-50">
-                  <button
-                    onClick={() => {
-                      exportData();
-                      setShowDataMenu(false);
-                    }}
-                    className="w-full px-4 py-3 text-left hover:bg-stone-100 flex items-center gap-3 border-b border-stone-200"
-                  >
-                    <Download size={18} strokeWidth={2.5} className="text-[#333333]" />
-                    <span className="font-bold text-sm uppercase tracking-wider text-[#333333]">Export Data</span>
-                  </button>
-                  <label className="w-full px-4 py-3 hover:bg-stone-100 flex items-center gap-3 cursor-pointer">
-                    <Upload size={18} strokeWidth={2.5} className="text-[#333333]" />
-                    <span className="font-bold text-sm uppercase tracking-wider text-[#333333]">Import Data</span>
-                    <input
-                      type="file"
-                      accept=".json"
-                      onChange={importData}
-                      className="hidden"
-                    />
-                  </label>
-                </div>
-              )}
+                <button
+                  onClick={() => setShowDataMenu(!showDataMenu)}
+                  className="p-2 hover:bg-stone-100 rounded-lg transition-colors"
+                >
+                  <div className="flex flex-col gap-1">
+                    <div className="w-5 h-0.5 bg-[#333333]"></div>
+                    <div className="w-5 h-0.5 bg-[#333333]"></div>
+                    <div className="w-5 h-0.5 bg-[#333333]"></div>
+                  </div>
+                </button>
+                
+                {showDataMenu && (
+                  <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-xl border-2 border-stone-200 z-50">
+                    <button
+                      onClick={() => {
+                        exportData();
+                        setShowDataMenu(false);
+                      }}
+                      className="w-full px-4 py-3 text-left hover:bg-stone-100 flex items-center gap-3 border-b border-stone-200"
+                    >
+                      <Download size={18} strokeWidth={2.5} className="text-[#333333]" />
+                      <span className="font-bold text-sm uppercase tracking-wider text-[#333333]">Export Data</span>
+                    </button>
+                    <label className="w-full px-4 py-3 hover:bg-stone-100 flex items-center gap-3 cursor-pointer">
+                      <Upload size={18} strokeWidth={2.5} className="text-[#333333]" />
+                      <span className="font-bold text-sm uppercase tracking-wider text-[#333333]">Import Data</span>
+                      <input
+                        type="file"
+                        accept=".json"
+                        onChange={importData}
+                        className="hidden"
+                      />
+                    </label>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>
