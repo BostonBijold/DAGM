@@ -43,7 +43,9 @@ class DataService {
         habits: [],
         goals: [],
         todos: [],
-        habitCompletions: {}
+        habitCompletions: {},
+        habitCompletionTimes: {},
+        routineCompletions: {}
       }
     };
 
@@ -136,6 +138,16 @@ class DataService {
     return userData ? userData.habitCompletions : {};
   }
 
+  getHabitCompletionTimes() {
+    const userData = this.getCurrentUserData();
+    return userData ? userData.habitCompletionTimes : {};
+  }
+
+  getRoutineCompletions() {
+    const userData = this.getCurrentUserData();
+    return userData ? userData.routineCompletions : {};
+  }
+
   // Specific Data Setters
   updateRoutines(routines) {
     const userData = this.getCurrentUserData();
@@ -174,6 +186,22 @@ class DataService {
     if (!userData) return false;
     
     userData.habitCompletions = habitCompletions;
+    return this.updateCurrentUserData(userData);
+  }
+
+  updateHabitCompletionTimes(habitCompletionTimes) {
+    const userData = this.getCurrentUserData();
+    if (!userData) return false;
+    
+    userData.habitCompletionTimes = habitCompletionTimes;
+    return this.updateCurrentUserData(userData);
+  }
+
+  updateRoutineCompletions(routineCompletions) {
+    const userData = this.getCurrentUserData();
+    if (!userData) return false;
+    
+    userData.routineCompletions = routineCompletions;
     return this.updateCurrentUserData(userData);
   }
 
@@ -236,6 +264,47 @@ class DataService {
       },
       userData: currentUser.data
     };
+  }
+
+  // Ensure default routines exist for current user
+  ensureDefaultRoutines() {
+    const userData = this.getCurrentUserData();
+    if (!userData) return false;
+
+    const defaultRoutines = [
+      {
+        id: 1,
+        name: "Morning Routine",
+        timeOfDay: "morning",
+        days: ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"],
+        habits: []
+      },
+      {
+        id: 2,
+        name: "Afternoon Routine",
+        timeOfDay: "afternoon",
+        days: ["monday", "tuesday", "wednesday", "thursday", "friday"],
+        habits: []
+      },
+      {
+        id: 3,
+        name: "Evening Routine",
+        timeOfDay: "evening",
+        days: ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"],
+        habits: []
+      }
+    ];
+
+    // Check if we need to add any missing default routines
+    const existingRoutineIds = userData.routines.map(r => r.id);
+    const missingRoutines = defaultRoutines.filter(r => !existingRoutineIds.includes(r.id));
+    
+    if (missingRoutines.length > 0) {
+      userData.routines = [...userData.routines, ...missingRoutines];
+      return this.updateCurrentUserData(userData);
+    }
+    
+    return true;
   }
 
   // Clear all data (for testing/reset)

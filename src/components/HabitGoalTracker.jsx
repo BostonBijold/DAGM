@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Check, Circle, Plus, X, ChevronRight, Home, Target, Calendar, CheckSquare, Edit2, Trash2, Download, Upload, TrendingUp, ChevronLeft, User } from 'lucide-react';
+import { Check, Circle, Plus, X, ChevronRight, Home, Target, Calendar, CheckSquare, Edit2, Trash2, Download, Upload, TrendingUp, ChevronLeft, User, Play } from 'lucide-react';
 import dataService from '../services/dataService';
 import UserManager from './UserManager';
 import { debugStorage, addTestData } from '../utils/debugStorage';
@@ -15,6 +15,14 @@ const HabitGoalTracker = () => {
   const [showDataMenu, setShowDataMenu] = useState(false);
   const [showUserManager, setShowUserManager] = useState(false);
   const [currentUser, setCurrentUser] = useState(null);
+  const [showRoutineEditModal, setShowRoutineEditModal] = useState(false);
+  const [editingRoutine, setEditingRoutine] = useState(null);
+  const [showHabitEditModal, setShowHabitEditModal] = useState(false);
+  const [editingHabit, setEditingHabit] = useState(null);
+  const [activeTimers, setActiveTimers] = useState({});
+  const [timerDurations, setTimerDurations] = useState({});
+  const [showHistory, setShowHistory] = useState(false);
+  const [timerUpdateTrigger, setTimerUpdateTrigger] = useState(0);
   
   // Sample motivational quotes
   const quotes = [
@@ -44,6 +52,12 @@ const HabitGoalTracker = () => {
   const [goals, setGoals] = useState([]);
   const [todos, setTodos] = useState([]);
   const [habitCompletions, setHabitCompletions] = useState({});
+  const [habitCompletionTimes, setHabitCompletionTimes] = useState({});
+  const [activeRoutine, setActiveRoutine] = useState(null); // Currently running routine
+  const [activeRoutineIndex, setActiveRoutineIndex] = useState(0); // Current habit index
+  const [routineStartTime, setRoutineStartTime] = useState(null);
+  const [routinePaused, setRoutinePaused] = useState(false);
+  const [routineCompletions, setRoutineCompletions] = useState({});
   
   // Initialize data from data service
   useEffect(() => {
@@ -62,11 +76,16 @@ const HabitGoalTracker = () => {
 
   // Load user data from data service
   const loadUserData = () => {
+    // Ensure default routines exist
+    dataService.ensureDefaultRoutines();
+    
     setRoutines(dataService.getRoutines());
     setHabits(dataService.getHabits());
     setGoals(dataService.getGoals());
     setTodos(dataService.getTodos());
     setHabitCompletions(dataService.getHabitCompletions());
+    setHabitCompletionTimes(dataService.getHabitCompletionTimes());
+    setRoutineCompletions(dataService.getRoutineCompletions());
   };
 
   // Handle user selection
@@ -89,6 +108,31 @@ const HabitGoalTracker = () => {
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [showDataMenu]);
+
+  // Timer update effect - use a more targeted approach
+  useEffect(() => {
+    if (!activeTimers || Object.keys(activeTimers).length === 0) return;
+    
+    const interval = setInterval(() => {
+      // Check if any timers have reached their cap
+      Object.keys(activeTimers).forEach(habitId => {
+        const startTime = activeTimers[habitId];
+        const duration = timerDurations[habitId];
+        
+        if (startTime && duration) {
+          const elapsed = (Date.now() - startTime) / 1000 / 60; // in minutes
+          if (elapsed >= duration) {
+            // Timer reached cap, auto-stop and save completion time
+            stopTimer(habitId, true);
+          }
+        }
+      });
+      
+      setTimerUpdateTrigger(prev => prev + 1);
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [activeTimers ? Object.keys(activeTimers).length : 0]);
   
   // Get today's date string
   const getTodayString = () => {
@@ -99,10 +143,13 @@ const HabitGoalTracker = () => {
   const HabitModal = ({ routineId, onClose }) => {
     const [habitName, setHabitName] = useState('');
     const [habitDescription, setHabitDescription] = useState('');
+    const [habitDuration, setHabitDuration] = useState('');
+    const [hasDuration, setHasDuration] = useState(false);
     
     const handleSubmit = () => {
       if (habitName.trim()) {
-        addHabitToRoutine(routineId, habitName.trim(), habitDescription.trim());
+        const duration = hasDuration && habitDuration ? parseInt(habitDuration) : null;
+        addHabitToRoutine(routineId, habitName.trim(), habitDescription.trim(), duration);
         onClose();
       }
     };
@@ -142,6 +189,35 @@ const HabitGoalTracker = () => {
                 rows="3"
               />
             </div>
+            
+            <div>
+              <label className="flex items-center gap-2 mb-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={hasDuration}
+                  onChange={(e) => setHasDuration(e.target.checked)}
+                  className="w-4 h-4 text-[#333333] border-2 border-stone-300 rounded focus:ring-[#333333] focus:ring-2 cursor-pointer"
+                />
+                <span className="text-sm font-bold text-[#333333] uppercase tracking-wider">
+                  Set Timer Cap
+                </span>
+              </label>
+              {hasDuration && (
+                <div className="flex items-center gap-2 mt-2">
+                  <input
+                    type="number"
+                    value={habitDuration}
+                    onChange={(e) => setHabitDuration(e.target.value)}
+                    placeholder="20"
+                    min="1"
+                    max="1440"
+                    className="w-20 px-3 py-2 border-2 border-stone-300 rounded-lg focus:outline-none focus:border-[#333333]"
+                  />
+                  <span className="text-sm text-[#333333] font-medium">minutes</span>
+                </div>
+              )}
+            </div>
+            
             <div className="flex gap-2 pt-2">
               <button
                 onClick={onClose}
@@ -331,6 +407,447 @@ const HabitGoalTracker = () => {
     );
   };
   
+  const RoutineEditModal = ({ routine, onClose }) => {
+    const [routineName, setRoutineName] = useState(routine?.name || '');
+    const [routineTime, setRoutineTime] = useState(routine?.timeOfDay || 'morning');
+    const [routineDays, setRoutineDays] = useState(routine?.days || []);
+    
+    const daysOfWeek = [
+      { key: 'monday', label: 'Monday' },
+      { key: 'tuesday', label: 'Tuesday' },
+      { key: 'wednesday', label: 'Wednesday' },
+      { key: 'thursday', label: 'Thursday' },
+      { key: 'friday', label: 'Friday' },
+      { key: 'saturday', label: 'Saturday' },
+      { key: 'sunday', label: 'Sunday' }
+    ];
+    
+    const timeOptions = [
+      { value: 'morning', label: 'Morning' },
+      { value: 'afternoon', label: 'Afternoon' },
+      { value: 'evening', label: 'Evening' }
+    ];
+    
+    const handleDayToggle = (day) => {
+      setRoutineDays(prev => 
+        prev.includes(day) 
+          ? prev.filter(d => d !== day)
+          : [...prev, day]
+      );
+    };
+    
+    const handleSubmit = () => {
+      if (routineName.trim() && routineDays.length > 0) {
+        const updatedRoutines = routines.map(r => 
+          r.id === routine.id 
+            ? { 
+                ...r, 
+                name: routineName.trim(),
+                timeOfDay: routineTime,
+                days: routineDays
+              }
+            : r
+        );
+        setRoutines(updatedRoutines);
+        dataService.updateRoutines(updatedRoutines);
+        onClose();
+      }
+    };
+    
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
+        <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6">
+          <div className="flex justify-between items-center mb-4 pb-3 border-b border-stone-200">
+            <h3 className="text-xl font-bold text-[#333333] uppercase tracking-wide">Edit Routine</h3>
+            <button onClick={onClose} className="text-[#333333] hover:opacity-60">
+              <X size={24} strokeWidth={2.5} />
+            </button>
+          </div>
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-bold text-[#333333] mb-2 uppercase tracking-wider">
+                Name *
+              </label>
+              <input
+                type="text"
+                value={routineName}
+                onChange={(e) => setRoutineName(e.target.value)}
+                placeholder="Morning Routine"
+                className="w-full px-3 py-2 border-2 border-stone-300 rounded-lg focus:outline-none focus:border-[#333333]"
+                autoFocus
+              />
+            </div>
+            
+            <div>
+              <label className="block text-sm font-bold text-[#333333] mb-2 uppercase tracking-wider">
+                Time of Day *
+              </label>
+              <select
+                value={routineTime}
+                onChange={(e) => setRoutineTime(e.target.value)}
+                className="w-full px-3 py-2 border-2 border-stone-300 rounded-lg focus:outline-none focus:border-[#333333]"
+              >
+                {timeOptions.map(option => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            
+            <div>
+              <label className="block text-sm font-bold text-[#333333] mb-2 uppercase tracking-wider">
+                Days of Week *
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                {daysOfWeek.map(day => (
+                  <label key={day.key} className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={routineDays.includes(day.key)}
+                      onChange={() => handleDayToggle(day.key)}
+                      className="w-4 h-4 text-[#333333] border-2 border-stone-300 rounded focus:ring-[#333333]"
+                    />
+                    <span className="text-sm text-[#333333]">{day.label}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+            
+            <div className="flex gap-2 pt-2">
+              <button
+                onClick={onClose}
+                className="flex-1 px-4 py-2.5 border-2 border-[#333333] text-[#333333] rounded-lg hover:bg-stone-100 font-bold uppercase text-sm tracking-wider transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSubmit}
+                className="flex-1 px-4 py-2.5 bg-black text-white rounded-lg hover:bg-[#333333] font-bold uppercase text-sm tracking-wider shadow-lg transition-all hover:shadow-xl hover:scale-105"
+              >
+                Save Changes
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+  
+  const HabitEditModal = ({ habit, onClose }) => {
+    const [habitName, setHabitName] = useState(habit?.name || '');
+    const [habitDescription, setHabitDescription] = useState(habit?.description || '');
+    const [habitDuration, setHabitDuration] = useState(habit?.duration || '');
+    const [hasDuration, setHasDuration] = useState(!!habit?.duration);
+    
+    const handleSubmit = () => {
+      if (habitName.trim()) {
+        const duration = hasDuration && habitDuration ? parseInt(habitDuration) : null;
+        const updatedHabits = habits.map(h => 
+          h.id === habit.id 
+            ? { 
+                ...h, 
+                name: habitName.trim(),
+                description: habitDescription.trim(),
+                duration: duration
+              }
+            : h
+        );
+        setHabits(updatedHabits);
+        dataService.updateHabits(updatedHabits);
+        onClose();
+      }
+    };
+    
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
+        <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6">
+          <div className="flex justify-between items-center mb-4 pb-3 border-b border-stone-200">
+            <h3 className="text-xl font-bold text-[#333333] uppercase tracking-wide">Edit Habit</h3>
+            <button onClick={onClose} className="text-[#333333] hover:opacity-60">
+              <X size={24} strokeWidth={2.5} />
+            </button>
+          </div>
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-bold text-[#333333] mb-2 uppercase tracking-wider">
+                Name *
+              </label>
+              <input
+                type="text"
+                value={habitName}
+                onChange={(e) => setHabitName(e.target.value)}
+                placeholder="Morning meditation"
+                className="w-full px-3 py-2 border-2 border-stone-300 rounded-lg focus:outline-none focus:border-[#333333]"
+                autoFocus
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-bold text-[#333333] mb-2 uppercase tracking-wider">
+                Why (optional)
+              </label>
+              <textarea
+                value={habitDescription}
+                onChange={(e) => setHabitDescription(e.target.value)}
+                placeholder="Why is this habit important?"
+                className="w-full px-3 py-2 border-2 border-stone-300 rounded-lg focus:outline-none focus:border-[#333333]"
+                rows="3"
+              />
+            </div>
+            
+            <div>
+              <label className="flex items-center gap-2 mb-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={hasDuration}
+                  onChange={(e) => setHasDuration(e.target.checked)}
+                  className="w-4 h-4 text-[#333333] border-2 border-stone-300 rounded focus:ring-[#333333] focus:ring-2 cursor-pointer"
+                />
+                <span className="text-sm font-bold text-[#333333] uppercase tracking-wider">
+                  Set Timer Cap
+                </span>
+              </label>
+              {hasDuration && (
+                <div className="flex items-center gap-2 mt-2">
+                  <input
+                    type="number"
+                    value={habitDuration}
+                    onChange={(e) => setHabitDuration(e.target.value)}
+                    placeholder="20"
+                    min="1"
+                    max="1440"
+                    className="w-20 px-3 py-2 border-2 border-stone-300 rounded-lg focus:outline-none focus:border-[#333333]"
+                  />
+                  <span className="text-sm text-[#333333] font-medium">minutes</span>
+                </div>
+              )}
+            </div>
+            
+            <div className="flex gap-2 pt-2">
+              <button
+                onClick={onClose}
+                className="flex-1 px-4 py-2.5 border-2 border-[#333333] text-[#333333] rounded-lg hover:bg-stone-100 font-bold uppercase text-sm tracking-wider transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSubmit}
+                className="flex-1 px-4 py-2.5 bg-black text-white rounded-lg hover:bg-[#333333] font-bold uppercase text-sm tracking-wider shadow-lg transition-all hover:shadow-xl hover:scale-105"
+              >
+                Save Changes
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  // Routine Overlay Component
+  const RoutineOverlay = () => {
+    if (!activeRoutine) return null;
+
+    const currentHabitId = activeRoutine.habits[activeRoutineIndex];
+    const currentHabit = habits.find(h => h.id === currentHabitId);
+    const today = getTodayString();
+    
+    // Calculate routine elapsed time
+    const routineElapsed = routineStartTime ? (Date.now() - routineStartTime) / 1000 / 60 : 0;
+    
+    // Get habit completion status
+    const getHabitStatus = (habitId) => {
+      const isComplete = habitCompletions[today]?.[habitId] || false;
+      const habitTime = habitCompletionTimes[today]?.[habitId];
+      return { isComplete, habitTime };
+    };
+
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-50 p-4">
+        <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+          {/* Header */}
+          <div className="p-6 border-b border-stone-200">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-2xl font-bold text-[#333333] uppercase tracking-wide">
+                {activeRoutine.name}
+              </h2>
+              <button
+                onClick={stopRoutine}
+                className="p-2 hover:bg-stone-100 rounded-lg transition-colors"
+                title="Stop Routine"
+              >
+                <X size={24} strokeWidth={2.5} className="text-[#333333]" />
+              </button>
+            </div>
+            
+            <div className="flex items-center justify-between">
+              <div className="text-center">
+                <p className="text-sm text-[#333333] opacity-70 uppercase tracking-wider">Progress</p>
+                <p className="text-lg font-bold text-[#333333]">
+                  {activeRoutineIndex + 1} / {activeRoutine.habits.length}
+                </p>
+              </div>
+              <div className="text-center">
+                <p className="text-sm text-[#333333] opacity-70 uppercase tracking-wider">Total Time</p>
+                <p className="text-lg font-bold text-[#333333] font-mono">
+                  {Math.floor(routineElapsed)}m {Math.round((routineElapsed % 1) * 60)}s
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Current Habit Display */}
+          {currentHabit && (
+            <div className="p-6 border-b border-stone-200">
+              <div className="text-center mb-6">
+                <h3 className="text-3xl font-bold text-[#333333] mb-2">
+                  {currentHabit.name}
+                </h3>
+                {currentHabit.description && (
+                  <p className="text-lg text-[#333333] opacity-70 italic">
+                    {currentHabit.description}
+                  </p>
+                )}
+              </div>
+
+              {/* Timer Display */}
+              {currentHabit.duration && (
+                <div className="text-center mb-6">
+                  {activeTimers[currentHabit.id] ? (
+                    <div>
+                      <div className="text-4xl font-bold text-[#333333] font-mono mb-2">
+                        {getTimerTimeRemaining(currentHabit.id)}m
+                      </div>
+                      <div className="w-full bg-stone-200 h-3 rounded-full mb-4">
+                        <div
+                          className="bg-blue-500 h-3 rounded-full transition-all"
+                          style={{ width: `${getTimerProgress(currentHabit.id)}%` }}
+                        ></div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-2xl text-[#333333] opacity-50">
+                      {routinePaused ? 'Paused' : 'Ready to Start'}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Action Buttons */}
+              <div className="flex justify-center gap-4">
+                {activeTimers[currentHabit.id] ? (
+                  <>
+                    <button
+                      onClick={() => completeRoutineHabit(currentHabit.id)}
+                      className="px-6 py-3 bg-green-500 text-white rounded-lg hover:bg-green-600 font-bold uppercase text-sm tracking-wider shadow-lg transition-all hover:shadow-xl hover:scale-105"
+                    >
+                      Complete
+                    </button>
+                    <button
+                      onClick={routinePaused ? resumeRoutine : pauseRoutine}
+                      className="px-6 py-3 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 font-bold uppercase text-sm tracking-wider shadow-lg transition-all hover:shadow-xl hover:scale-105"
+                    >
+                      {routinePaused ? 'Resume' : 'Pause'}
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    onClick={() => {
+                      if (currentHabit.duration) {
+                        startTimer(currentHabit.id, currentHabit.duration);
+                      } else {
+                        completeRoutineHabit(currentHabit.id);
+                      }
+                    }}
+                    className="px-6 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 font-bold uppercase text-sm tracking-wider shadow-lg transition-all hover:shadow-xl hover:scale-105"
+                  >
+                    {currentHabit.duration ? 'Start Timer' : 'Mark Complete'}
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Navigation Controls */}
+          <div className="p-6 border-b border-stone-200">
+            <div className="flex justify-center gap-4">
+              <button
+                onClick={goToPreviousHabit}
+                disabled={activeRoutineIndex <= 0}
+                className="px-4 py-2 bg-stone-200 text-[#333333] rounded-lg hover:bg-stone-300 font-bold uppercase text-sm tracking-wider transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                ← Back
+              </button>
+              <button
+                onClick={skipCurrentHabit}
+                className="px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 font-bold uppercase text-sm tracking-wider transition-all hover:shadow-lg"
+              >
+                Skip
+              </button>
+            </div>
+          </div>
+
+          {/* Habit List Preview */}
+          <div className="p-6">
+            <h4 className="font-bold text-[#333333] mb-4 text-sm uppercase tracking-wide">
+              Routine Progress
+            </h4>
+            <div className="space-y-2">
+              {activeRoutine.habits.map((habitId, index) => {
+                const habit = habits.find(h => h.id === habitId);
+                if (!habit) return null;
+                
+                const { isComplete, habitTime } = getHabitStatus(habitId);
+                const isCurrent = index === activeRoutineIndex;
+                
+                return (
+                  <div
+                    key={habitId}
+                    className={`flex items-center justify-between p-3 rounded-lg ${
+                      isCurrent 
+                        ? 'bg-blue-100 border-2 border-blue-500' 
+                        : isComplete 
+                          ? 'bg-green-50 border border-green-200' 
+                          : 'bg-stone-50 border border-stone-200'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      {isComplete ? (
+                        <CheckSquare className="text-green-600" size={20} strokeWidth={2.5} />
+                      ) : isCurrent ? (
+                        <div className="w-5 h-5 border-2 border-blue-500 rounded-full flex items-center justify-center">
+                          <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                        </div>
+                      ) : (
+                        <Circle className="text-[#333333] opacity-40" size={20} strokeWidth={2.5} />
+                      )}
+                      <span className={`font-medium ${
+                        isComplete ? 'text-green-700' : isCurrent ? 'text-blue-700' : 'text-[#333333]'
+                      }`}>
+                        {habit.name}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {isComplete && habitTime && (
+                        <span className="text-xs bg-green-200 text-green-800 px-2 py-1 font-mono rounded">
+                          {Math.round(habitTime * 10) / 10}m
+                        </span>
+                      )}
+                      {isCurrent && (
+                        <span className="text-xs bg-blue-200 text-blue-800 px-2 py-1 font-mono rounded">
+                          Current
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+  
   // Get current day of week
   const getCurrentDay = () => {
     const days = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
@@ -372,22 +889,138 @@ const HabitGoalTracker = () => {
   
   // Toggle habit completion
   const toggleHabitCompletion = (habitId) => {
+    // If a routine is active, prevent manual toggling of other habits
+    if (activeRoutine && activeRoutine.habits[activeRoutineIndex] !== habitId) {
+      return; // Don't allow manual toggle of other habits during routine
+    }
+
     const today = getTodayString();
+    const currentCompletions = habitCompletions || {};
     const newHabitCompletions = {
-      ...habitCompletions,
+      ...currentCompletions,
       [today]: {
-        ...(habitCompletions[today] || {}),
-        [habitId]: !(habitCompletions[today]?.[habitId] || false)
+        ...(currentCompletions[today] || {}),
+        [habitId]: !(currentCompletions[today]?.[habitId] || false)
       }
     };
     setHabitCompletions(newHabitCompletions);
     dataService.updateHabitCompletions(newHabitCompletions);
+
+    // If this is the current habit in an active routine, complete it
+    if (activeRoutine && activeRoutine.habits[activeRoutineIndex] === habitId) {
+      completeRoutineHabit(habitId);
+    }
+  };
+
+  // Timer functions
+  const startTimer = (habitId, duration) => {
+    const startTime = Date.now();
+    setActiveTimers(prev => ({
+      ...prev,
+      [habitId]: startTime
+    }));
+    setTimerDurations(prev => ({
+      ...prev,
+      [habitId]: duration
+    }));
+  };
+
+  const stopTimer = (habitId, completed = false) => {
+    const startTime = activeTimers[habitId];
+    const duration = timerDurations[habitId];
+    
+    // If completed, save the completion time
+    if (completed && startTime) {
+      const completionTime = (Date.now() - startTime) / 1000 / 60; // in minutes
+      const today = getTodayString();
+      const currentCompletionTimes = habitCompletionTimes || {};
+      
+      const newCompletionTimes = {
+        ...currentCompletionTimes,
+        [today]: {
+          ...(currentCompletionTimes[today] || {}),
+          [habitId]: completionTime
+        }
+      };
+      
+      setHabitCompletionTimes(newCompletionTimes);
+      dataService.updateHabitCompletionTimes(newCompletionTimes);
+    }
+    
+    // Clear the timer
+    setActiveTimers(prev => {
+      const newTimers = { ...prev };
+      delete newTimers[habitId];
+      return newTimers;
+    });
+    setTimerDurations(prev => {
+      const newDurations = { ...prev };
+      delete newDurations[habitId];
+      return newDurations;
+    });
+
+    // If in routine mode and this habit was completed, handle routine flow
+    if (activeRoutine && completed && activeRoutine.habits[activeRoutineIndex] === habitId) {
+      completeRoutineHabit(habitId);
+    }
+  };
+
+  const getTimerProgress = (habitId) => {
+    const startTime = activeTimers[habitId];
+    const duration = timerDurations[habitId];
+    if (!startTime || !duration) return 0;
+    
+    const elapsed = (Date.now() - startTime) / 1000 / 60; // in minutes
+    // Reference timerUpdateTrigger to ensure re-renders when timer updates
+    const _ = timerUpdateTrigger; // This ensures the function depends on timerUpdateTrigger
+    return Math.min((elapsed / duration) * 100, 100);
+  };
+
+  const getTimerTimeRemaining = (habitId) => {
+    const startTime = activeTimers[habitId];
+    const duration = timerDurations[habitId];
+    if (!startTime || !duration) return null;
+    
+    // Use timerUpdateTrigger to ensure this recalculates on timer updates
+    // This forces the component to re-render when timerUpdateTrigger changes
+    const elapsed = (Date.now() - startTime) / 1000 / 60; // in minutes
+    const remaining = Math.max(duration - elapsed, 0);
+    // Reference timerUpdateTrigger to ensure re-renders when timer updates
+    const _ = timerUpdateTrigger; // This ensures the function depends on timerUpdateTrigger
+    return Math.ceil(remaining);
+  };
+
+  // Calculate average completion time for a habit
+  const getAverageCompletionTime = (habitId) => {
+    const allTimes = [];
+    
+    // Check if habitCompletionTimes exists and is an object
+    if (!habitCompletionTimes || typeof habitCompletionTimes !== 'object') {
+      return null;
+    }
+    
+    // Get all completion times for this habit across all dates
+    Object.keys(habitCompletionTimes).forEach(date => {
+      if (habitCompletionTimes[date] && habitCompletionTimes[date][habitId]) {
+        allTimes.push(habitCompletionTimes[date][habitId]);
+      }
+    });
+    
+    if (allTimes.length === 0) return null;
+    
+    const average = allTimes.reduce((sum, time) => sum + time, 0) / allTimes.length;
+    return Math.round(average * 10) / 10; // Round to 1 decimal place
   };
   
   // Calculate habit streak
   const getHabitStreak = (habitId) => {
     let streak = 0;
     let date = new Date(currentDate);
+    
+    // Check if habitCompletions exists and is an object
+    if (!habitCompletions || typeof habitCompletions !== 'object') {
+      return 0;
+    }
     
     while (true) {
       const dateString = date.toISOString().split('T')[0];
@@ -401,13 +1034,268 @@ const HabitGoalTracker = () => {
     
     return streak;
   };
+
+  // Routine Control Functions
+  const startRoutine = (routineId) => {
+    const routine = routines.find(r => r.id === routineId);
+    if (!routine) return;
+
+    // Find first uncompleted habit in routine
+    const today = getTodayString();
+    let firstIncompleteIndex = 0;
+    
+    for (let i = 0; i < routine.habits.length; i++) {
+      const habitId = routine.habits[i];
+      const isComplete = habitCompletions[today]?.[habitId] || false;
+      if (!isComplete) {
+        firstIncompleteIndex = i;
+        break;
+      }
+    }
+
+    // Set routine state
+    setActiveRoutine(routine);
+    setActiveRoutineIndex(firstIncompleteIndex);
+    setRoutineStartTime(Date.now());
+    setRoutinePaused(false);
+
+    // Start timer for first incomplete habit
+    const firstHabitId = routine.habits[firstIncompleteIndex];
+    const firstHabit = habits.find(h => h.id === firstHabitId);
+    if (firstHabit && firstHabit.duration) {
+      startTimer(firstHabitId, firstHabit.duration);
+    }
+  };
+
+  const completeRoutineHabit = (habitId) => {
+    if (!activeRoutine) return;
+
+    // Stop current timer and save time
+    const startTime = activeTimers[habitId];
+    if (startTime) {
+      const completionTime = (Date.now() - startTime) / 1000 / 60; // in minutes
+      const today = getTodayString();
+      const currentCompletionTimes = habitCompletionTimes || {};
+      
+      const newCompletionTimes = {
+        ...currentCompletionTimes,
+        [today]: {
+          ...(currentCompletionTimes[today] || {}),
+          [habitId]: completionTime
+        }
+      };
+      
+      setHabitCompletionTimes(newCompletionTimes);
+      dataService.updateHabitCompletionTimes(newCompletionTimes);
+    }
+
+    // Mark habit complete
+    const today = getTodayString();
+    const currentCompletions = habitCompletions || {};
+    const newHabitCompletions = {
+      ...currentCompletions,
+      [today]: {
+        ...(currentCompletions[today] || {}),
+        [habitId]: true
+      }
+    };
+    setHabitCompletions(newHabitCompletions);
+    dataService.updateHabitCompletions(newHabitCompletions);
+
+    // Clear the timer
+    setActiveTimers(prev => {
+      const newTimers = { ...prev };
+      delete newTimers[habitId];
+      return newTimers;
+    });
+    setTimerDurations(prev => {
+      const newDurations = { ...prev };
+      delete newDurations[habitId];
+      return newDurations;
+    });
+
+    // Move to next habit
+    const nextIndex = activeRoutineIndex + 1;
+    if (nextIndex < activeRoutine.habits.length) {
+      setActiveRoutineIndex(nextIndex);
+      const nextHabitId = activeRoutine.habits[nextIndex];
+      const nextHabit = habits.find(h => h.id === nextHabitId);
+      if (nextHabit && nextHabit.duration) {
+        startTimer(nextHabitId, nextHabit.duration);
+      }
+    } else {
+      // Routine complete
+      finishRoutine();
+    }
+  };
+
+  const goToPreviousHabit = () => {
+    if (!activeRoutine || activeRoutineIndex <= 0) return;
+
+    // Stop current timer
+    const currentHabitId = activeRoutine.habits[activeRoutineIndex];
+    if (activeTimers[currentHabitId]) {
+      setActiveTimers(prev => {
+        const newTimers = { ...prev };
+        delete newTimers[currentHabitId];
+        return newTimers;
+      });
+      setTimerDurations(prev => {
+        const newDurations = { ...prev };
+        delete newDurations[currentHabitId];
+        return newDurations;
+      });
+    }
+
+    // Go to previous habit
+    const prevIndex = activeRoutineIndex - 1;
+    setActiveRoutineIndex(prevIndex);
+    const prevHabitId = activeRoutine.habits[prevIndex];
+    const prevHabit = habits.find(h => h.id === prevHabitId);
+    if (prevHabit && prevHabit.duration) {
+      startTimer(prevHabitId, prevHabit.duration);
+    }
+  };
+
+  const skipCurrentHabit = () => {
+    if (!activeRoutine) return;
+
+    // Stop current timer
+    const currentHabitId = activeRoutine.habits[activeRoutineIndex];
+    if (activeTimers[currentHabitId]) {
+      setActiveTimers(prev => {
+        const newTimers = { ...prev };
+        delete newTimers[currentHabitId];
+        return newTimers;
+      });
+      setTimerDurations(prev => {
+        const newDurations = { ...prev };
+        delete newDurations[currentHabitId];
+        return newDurations;
+      });
+    }
+
+    // Move to next habit
+    const nextIndex = activeRoutineIndex + 1;
+    if (nextIndex < activeRoutine.habits.length) {
+      setActiveRoutineIndex(nextIndex);
+      const nextHabitId = activeRoutine.habits[nextIndex];
+      const nextHabit = habits.find(h => h.id === nextHabitId);
+      if (nextHabit && nextHabit.duration) {
+        startTimer(nextHabitId, nextHabit.duration);
+      }
+    } else {
+      // Routine complete
+      finishRoutine();
+    }
+  };
+
+  const pauseRoutine = () => {
+    if (!activeRoutine) return;
+    
+    // Pause current timer
+    const currentHabitId = activeRoutine.habits[activeRoutineIndex];
+    if (activeTimers[currentHabitId]) {
+      setActiveTimers(prev => {
+        const newTimers = { ...prev };
+        delete newTimers[currentHabitId];
+        return newTimers;
+      });
+      setTimerDurations(prev => {
+        const newDurations = { ...prev };
+        delete newDurations[currentHabitId];
+        return newDurations;
+      });
+    }
+    
+    setRoutinePaused(true);
+  };
+
+  const resumeRoutine = () => {
+    if (!activeRoutine) return;
+    
+    // Resume current habit timer
+    const currentHabitId = activeRoutine.habits[activeRoutineIndex];
+    const currentHabit = habits.find(h => h.id === currentHabitId);
+    if (currentHabit && currentHabit.duration) {
+      startTimer(currentHabitId, currentHabit.duration);
+    }
+    
+    setRoutinePaused(false);
+  };
+
+  const stopRoutine = () => {
+    // Stop current timer
+    const currentHabitId = activeRoutine?.habits[activeRoutineIndex];
+    if (currentHabitId && activeTimers[currentHabitId]) {
+      setActiveTimers(prev => {
+        const newTimers = { ...prev };
+        delete newTimers[currentHabitId];
+        return newTimers;
+      });
+      setTimerDurations(prev => {
+        const newDurations = { ...prev };
+        delete newDurations[currentHabitId];
+        return newDurations;
+      });
+    }
+
+    // Clear routine state
+    setActiveRoutine(null);
+    setActiveRoutineIndex(0);
+    setRoutineStartTime(null);
+    setRoutinePaused(false);
+  };
+
+  const finishRoutine = () => {
+    if (!activeRoutine || !routineStartTime) return;
+
+    // Calculate total routine time
+    const totalTime = (Date.now() - routineStartTime) / 1000 / 60; // in minutes
+    const today = getTodayString();
+    
+    // Collect habit times for this routine
+    const habitTimes = {};
+    activeRoutine.habits.forEach(habitId => {
+      const habitTime = habitCompletionTimes[today]?.[habitId];
+      if (habitTime) {
+        habitTimes[habitId] = habitTime;
+      }
+    });
+
+    // Save routine completion
+    const currentRoutineCompletions = routineCompletions || {};
+    const newRoutineCompletions = {
+      ...currentRoutineCompletions,
+      [today]: {
+        ...(currentRoutineCompletions[today] || {}),
+        [activeRoutine.id]: {
+          totalTime: totalTime,
+          startTime: new Date(routineStartTime).toISOString(),
+          endTime: new Date().toISOString(),
+          completed: true,
+          habitTimes: habitTimes
+        }
+      }
+    };
+    
+    setRoutineCompletions(newRoutineCompletions);
+    dataService.updateRoutineCompletions(newRoutineCompletions);
+
+    // Clear routine state
+    setActiveRoutine(null);
+    setActiveRoutineIndex(0);
+    setRoutineStartTime(null);
+    setRoutinePaused(false);
+  };
   
   // Add habit to routine
-  const addHabitToRoutine = (routineId, habitName, habitDescription = '') => {
+  const addHabitToRoutine = (routineId, habitName, habitDescription = '', duration = null) => {
     const newHabit = {
       id: Date.now(),
       name: habitName,
       description: habitDescription,
+      duration: duration,
       routineId: routineId,
       createdAt: new Date().toISOString()
     };
@@ -598,11 +1486,61 @@ const HabitGoalTracker = () => {
                         {habit.name}
                       </span>
                     </div>
-                    {streak > 0 && (
-                      <span className="text-xs bg-[#333333] text-white px-2 py-1 font-mono font-bold rounded">
-                        {streak}D
-                      </span>
-                    )}
+                    <div className="flex items-center gap-2">
+                      {streak > 0 && (
+                        <span className="text-xs bg-[#333333] text-white px-2 py-1 font-mono font-bold rounded">
+                          {streak}D
+                        </span>
+                      )}
+                      {habit.duration && (
+                        <div className="flex items-center gap-1">
+                          {activeTimers[habit.id] ? (
+                            <>
+                              <span className="text-xs bg-blue-500 text-white px-2 py-1 font-mono rounded">
+                                {getTimerTimeRemaining(habit.id)}m
+                              </span>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  stopTimer(habit.id, true);
+                                  toggleHabitCompletion(habit.id);
+                                }}
+                                className="p-1 hover:bg-green-100 rounded transition-colors"
+                                title="Complete Habit"
+                              >
+                                <Check size={14} strokeWidth={2.5} className="text-green-600" />
+                              </button>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  stopTimer(habit.id, false);
+                                }}
+                                className="p-1 hover:bg-red-100 rounded transition-colors"
+                                title="Stop Timer"
+                              >
+                                <X size={14} strokeWidth={2.5} className="text-red-600" />
+                              </button>
+                            </>
+                          ) : (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                startTimer(habit.id, habit.duration);
+                              }}
+                              className="p-1 hover:bg-green-100 rounded transition-colors"
+                              title="Start Timer"
+                            >
+                              <div className="w-3 h-3 bg-green-500 rounded-full"></div>
+                            </button>
+                          )}
+                          {getAverageCompletionTime(habit.id) && (
+                            <span className="text-xs bg-stone-200 text-[#333333] px-2 py-1 font-mono rounded">
+                              Avg: {getAverageCompletionTime(habit.id)}m
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 );
               })}
@@ -610,6 +1548,18 @@ const HabitGoalTracker = () => {
                 <p className="text-[#333333] opacity-50 text-sm">No habits in this routine yet.</p>
               )}
             </div>
+            
+            {/* Start Routine Button */}
+            {nextRoutine.habits.length > 0 && (
+              <button
+                onClick={() => startRoutine(nextRoutine.id)}
+                disabled={activeRoutine !== null}
+                className="mt-4 w-full flex items-center justify-center gap-2 bg-green-500 text-white py-3 rounded-lg hover:bg-green-600 font-bold uppercase text-sm tracking-wider shadow-lg transition-all hover:shadow-xl hover:scale-[1.02] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
+              >
+                <Play size={20} strokeWidth={2.5} />
+                {activeRoutine ? 'Routine In Progress' : 'Start Routine'}
+              </button>
+            )}
           </div>
         )}
         
@@ -686,7 +1636,6 @@ const HabitGoalTracker = () => {
   // Routines View
   const RoutinesView = () => {
     const [selectedRoutine, setSelectedRoutine] = useState(null);
-    const [showHistory, setShowHistory] = useState(false);
     
     if (showHistory) {
       return <HistoryView onClose={() => setShowHistory(false)} />;
@@ -708,9 +1657,27 @@ const HabitGoalTracker = () => {
         {routines.map(routine => (
           <div key={routine.id} className="bg-white rounded-xl shadow-md p-4">
             <div className="flex items-center justify-between mb-3">
-              <h3 className="font-bold text-[#333333] uppercase tracking-wide">{routine.name}</h3>
+              <div className="flex items-center gap-3">
+                <h3 className="font-bold text-[#333333] uppercase tracking-wide">{routine.name}</h3>
+                <button
+                  onClick={() => {
+                    setEditingRoutine(routine);
+                    setShowRoutineEditModal(true);
+                  }}
+                  className="p-1 hover:bg-stone-100 rounded transition-colors"
+                  title="Edit Routine"
+                >
+                  <Edit2 size={16} strokeWidth={2.5} className="text-[#333333] opacity-60" />
+                </button>
+              </div>
               <span className="text-xs bg-[#333333] text-white px-2 py-1 font-mono rounded">
                 {routine.days.map(d => d.substring(0, 3).toUpperCase()).join(' ')}
+              </span>
+            </div>
+            
+            <div className="mb-2">
+              <span className="text-xs bg-stone-200 text-[#333333] px-2 py-1 font-mono rounded">
+                {routine.timeOfDay.toUpperCase()}
               </span>
             </div>
             
@@ -718,31 +1685,124 @@ const HabitGoalTracker = () => {
               {routine.habits.map(habitId => {
                 const habit = habits.find(h => h.id === habitId);
                 if (!habit) return null;
+                const isComplete = habitCompletions[getTodayString()]?.[habitId] || false;
                 const streak = getHabitStreak(habitId);
                 
                 return (
-                  <div key={habitId} className="flex items-center justify-between p-2 bg-stone-50 rounded-lg">
-                    <span className="text-[#333333]">{habit.name}</span>
-                    {streak > 0 && (
-                      <span className="text-xs bg-[#333333] text-white px-2 py-1 font-mono font-bold rounded">
-                        {streak}D
+                  <div
+                    key={habitId}
+                    className="flex items-center justify-between p-3 bg-stone-50 rounded-lg hover:bg-stone-100 transition-colors"
+                  >
+                    <div 
+                      className="flex-grow flex items-center gap-3 cursor-pointer"
+                      onClick={() => toggleHabitCompletion(habitId)}
+                    >
+                      {isComplete ? (
+                        <CheckSquare className="text-[#333333]" size={20} strokeWidth={2.5} />
+                      ) : (
+                        <Circle className="text-[#333333] opacity-40" size={20} strokeWidth={2.5} />
+                      )}
+                      <span className={isComplete ? "line-through text-[#333333] opacity-50" : "text-[#333333] font-medium"}>
+                        {habit.name}
                       </span>
-                    )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {streak > 0 && (
+                        <span className="text-xs bg-[#333333] text-white px-2 py-1 font-mono font-bold rounded">
+                          {streak}D
+                        </span>
+                      )}
+                      {habit.duration && (
+                        <div className="flex items-center gap-1">
+                          {activeTimers[habit.id] ? (
+                            <>
+                              <span className="text-xs bg-blue-500 text-white px-2 py-1 font-mono rounded">
+                                {getTimerTimeRemaining(habit.id)}m
+                              </span>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  stopTimer(habit.id, true);
+                                  toggleHabitCompletion(habit.id);
+                                }}
+                                className="p-1 hover:bg-green-100 rounded transition-colors"
+                                title="Complete Habit"
+                              >
+                                <Check size={14} strokeWidth={2.5} className="text-green-600" />
+                              </button>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  stopTimer(habit.id, false);
+                                }}
+                                className="p-1 hover:bg-red-100 rounded transition-colors"
+                                title="Stop Timer"
+                              >
+                                <X size={14} strokeWidth={2.5} className="text-red-600" />
+                              </button>
+                            </>
+                          ) : (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                startTimer(habit.id, habit.duration);
+                              }}
+                              className="p-1 hover:bg-green-100 rounded transition-colors"
+                              title="Start Timer"
+                            >
+                              <div className="w-3 h-3 bg-green-500 rounded-full"></div>
+                            </button>
+                          )}
+                          {getAverageCompletionTime(habit.id) && (
+                            <span className="text-xs bg-stone-200 text-[#333333] px-2 py-1 font-mono rounded">
+                              Avg: {getAverageCompletionTime(habit.id)}m
+                            </span>
+                          )}
+                        </div>
+                      )}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setEditingHabit(habit);
+                          setShowHabitEditModal(true);
+                        }}
+                        className="p-1 hover:bg-stone-200 rounded transition-colors"
+                        title="Edit Habit"
+                      >
+                        <Edit2 size={16} strokeWidth={2.5} className="text-[#333333] opacity-60" />
+                      </button>
+                    </div>
                   </div>
                 );
               })}
+              {routine.habits.length === 0 && (
+                <p className="text-[#333333] opacity-50 text-sm text-center py-4">No habits in this routine yet.</p>
+              )}
             </div>
             
-            <button
-              onClick={() => {
-                setSelectedRoutineForHabit(routine.id);
-                setShowHabitModal(true);
-              }}
-              className="mt-3 w-full flex items-center justify-center gap-2 bg-black text-white py-3 rounded-lg hover:bg-[#333333] font-bold uppercase text-sm tracking-wider shadow-lg transition-all hover:shadow-xl hover:scale-[1.02]"
-            >
-              <Plus size={20} strokeWidth={2.5} />
-              Add Habit
-            </button>
+            <div className="mt-3 space-y-2">
+              <button
+                onClick={() => {
+                  setSelectedRoutineForHabit(routine.id);
+                  setShowHabitModal(true);
+                }}
+                className="w-full flex items-center justify-center gap-2 bg-black text-white py-3 rounded-lg hover:bg-[#333333] font-bold uppercase text-sm tracking-wider shadow-lg transition-all hover:shadow-xl hover:scale-[1.02]"
+              >
+                <Plus size={20} strokeWidth={2.5} />
+                Add Habit
+              </button>
+              
+              {routine.habits.length > 0 && (
+                <button
+                  onClick={() => startRoutine(routine.id)}
+                  disabled={activeRoutine !== null}
+                  className="w-full flex items-center justify-center gap-2 bg-green-500 text-white py-3 rounded-lg hover:bg-green-600 font-bold uppercase text-sm tracking-wider shadow-lg transition-all hover:shadow-xl hover:scale-[1.02] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
+                >
+                  <Play size={20} strokeWidth={2.5} />
+                  {activeRoutine ? 'Routine In Progress' : 'Start Routine'}
+                </button>
+              )}
+            </div>
           </div>
         ))}
       </div>
@@ -900,6 +1960,41 @@ const HabitGoalTracker = () => {
       }
       return days;
     };
+
+    // Get routine completions for a specific date
+    const getRoutineCompletionsForDate = (date) => {
+      const dateStr = getDateString(date);
+      return routineCompletions[dateStr] || {};
+    };
+
+    // Calculate routine statistics
+    const getRoutineStats = () => {
+      const allRoutineCompletions = Object.values(routineCompletions).flatMap(dayCompletions => 
+        Object.values(dayCompletions)
+      );
+      
+      if (allRoutineCompletions.length === 0) {
+        return {
+          totalRoutines: 0,
+          completedRoutines: 0,
+          averageTime: 0,
+          totalTime: 0
+        };
+      }
+
+      const completedRoutines = allRoutineCompletions.filter(r => r.completed);
+      const totalTime = allRoutineCompletions.reduce((sum, r) => sum + (r.totalTime || 0), 0);
+      const averageTime = completedRoutines.length > 0 
+        ? completedRoutines.reduce((sum, r) => sum + (r.totalTime || 0), 0) / completedRoutines.length 
+        : 0;
+
+      return {
+        totalRoutines: allRoutineCompletions.length,
+        completedRoutines: completedRoutines.length,
+        averageTime: Math.round(averageTime * 10) / 10,
+        totalTime: Math.round(totalTime * 10) / 10
+      };
+    };
     
     const selectedDateStr = getDateString(selectedDate);
     const habitsForSelectedDate = getHabitsForDate(selectedDate);
@@ -1035,6 +2130,52 @@ const HabitGoalTracker = () => {
                 )}
               </div>
             </div>
+
+            {/* Day Routine Completions */}
+            {(() => {
+              const dayRoutineCompletions = getRoutineCompletionsForDate(selectedDate);
+              const routineIds = Object.keys(dayRoutineCompletions);
+              
+              if (routineIds.length > 0) {
+                return (
+                  <div className="bg-white rounded-xl shadow-md p-4">
+                    <h3 className="font-bold text-[#333333] mb-3 text-sm uppercase tracking-wide">Routine Completions</h3>
+                    <div className="space-y-2">
+                      {routineIds.map(routineId => {
+                        const routine = routines.find(r => r.id === parseInt(routineId));
+                        const completion = dayRoutineCompletions[routineId];
+                        if (!routine || !completion) return null;
+                        
+                        return (
+                          <div key={routineId} className="p-3 bg-stone-50 rounded-lg">
+                            <div className="flex items-center justify-between mb-2">
+                              <span className="font-medium text-[#333333]">{routine.name}</span>
+                              <span className={`text-xs px-2 py-1 rounded font-mono ${
+                                completion.completed 
+                                  ? 'bg-green-200 text-green-800' 
+                                  : 'bg-orange-200 text-orange-800'
+                              }`}>
+                                {completion.completed ? 'Completed' : 'Abandoned'}
+                              </span>
+                            </div>
+                            <div className="text-sm text-[#333333] opacity-70">
+                              <p>Total Time: {Math.round(completion.totalTime * 10) / 10}m</p>
+                              {completion.startTime && (
+                                <p>Started: {new Date(completion.startTime).toLocaleTimeString()}</p>
+                              )}
+                              {completion.endTime && (
+                                <p>Finished: {new Date(completion.endTime).toLocaleTimeString()}</p>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              }
+              return null;
+            })()}
           </>
         ) : (
           <>
@@ -1094,6 +2235,30 @@ const HabitGoalTracker = () => {
                   <p className="text-xs text-[#333333] opacity-70 uppercase tracking-wider mt-1">Perfect Days</p>
                 </div>
               </div>
+            </div>
+
+            {/* Routine Statistics */}
+            <div className="bg-white rounded-xl shadow-md p-4">
+              <h3 className="font-bold text-[#333333] mb-3 text-sm uppercase tracking-wide">Routine Statistics</h3>
+              {(() => {
+                const stats = getRoutineStats();
+                return (
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="text-center p-3 bg-stone-50 rounded-lg">
+                      <p className="text-2xl font-bold text-[#333333] font-mono">
+                        {stats.completedRoutines}/{stats.totalRoutines}
+                      </p>
+                      <p className="text-xs text-[#333333] opacity-70 uppercase tracking-wider mt-1">Completed</p>
+                    </div>
+                    <div className="text-center p-3 bg-stone-50 rounded-lg">
+                      <p className="text-2xl font-bold text-[#333333] font-mono">
+                        {stats.averageTime}m
+                      </p>
+                      <p className="text-xs text-[#333333] opacity-70 uppercase tracking-wider mt-1">Avg Time</p>
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           </>
         )}
@@ -1246,9 +2411,33 @@ const HabitGoalTracker = () => {
             }} 
           />
         )}
+
+        {showRoutineEditModal && (
+          <RoutineEditModal 
+            routine={editingRoutine}
+            onClose={() => {
+              setShowRoutineEditModal(false);
+              setEditingRoutine(null);
+            }} 
+          />
+        )}
+        
+        {showHabitEditModal && (
+          <HabitEditModal 
+            habit={editingHabit}
+            onClose={() => {
+              setShowHabitEditModal(false);
+              setEditingHabit(null);
+            }} 
+          />
+        )}
+
+        {/* Routine Overlay */}
+        <RoutineOverlay />
       </div>
     </div>
   );
 };
+
 
 export default HabitGoalTracker;
