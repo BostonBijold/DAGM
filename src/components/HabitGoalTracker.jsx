@@ -7,10 +7,8 @@ import { debugStorage, addTestData } from '../utils/debugStorage';
 const HabitGoalTracker = () => {
   const [currentView, setCurrentView] = useState('dashboard');
   const [currentDate, setCurrentDate] = useState(new Date());
-  const [showHabitModal, setShowHabitModal] = useState(false);
   const [showGoalModal, setShowGoalModal] = useState(false);
   const [showTaskModal, setShowTaskModal] = useState(false);
-  const [selectedRoutineForHabit, setSelectedRoutineForHabit] = useState(null);
   const [selectedGoalForTask, setSelectedGoalForTask] = useState(null);
   const [showDataMenu, setShowDataMenu] = useState(false);
   const [showUserManager, setShowUserManager] = useState(false);
@@ -68,6 +66,7 @@ const HabitGoalTracker = () => {
     if (user) {
       setCurrentUser(user);
       loadUserData();
+      checkAndResetDailyHabits();
     } else {
       // No user found, show user manager
       setShowUserManager(true);
@@ -86,6 +85,46 @@ const HabitGoalTracker = () => {
     setHabitCompletions(dataService.getHabitCompletions());
     setHabitCompletionTimes(dataService.getHabitCompletionTimes());
     setRoutineCompletions(dataService.getRoutineCompletions());
+  };
+
+  // Check if we need to reset habits for a new day
+  const checkAndResetDailyHabits = () => {
+    const today = getTodayString();
+    const lastResetDate = localStorage.getItem('habitTrackerLastResetDate');
+    
+    // If this is a new day, reset all habit completions
+    if (lastResetDate !== today) {
+      // Clear today's habit completions and completion times
+      const currentCompletions = dataService.getHabitCompletions();
+      const currentCompletionTimes = dataService.getHabitCompletionTimes();
+      
+      // Remove today's data if it exists
+      if (currentCompletions[today]) {
+        delete currentCompletions[today];
+      }
+      if (currentCompletionTimes[today]) {
+        delete currentCompletionTimes[today];
+      }
+      
+      // Update the data
+      dataService.updateHabitCompletions(currentCompletions);
+      dataService.updateHabitCompletionTimes(currentCompletionTimes);
+      
+      // Update local state
+      setHabitCompletions(currentCompletions);
+      setHabitCompletionTimes(currentCompletionTimes);
+      
+      // Update last reset date
+      localStorage.setItem('habitTrackerLastResetDate', today);
+      
+      // Also reset daily todos (remove todos that were added today)
+      const currentTodos = dataService.getTodos();
+      const filteredTodos = currentTodos.filter(todo => todo.addedAt !== today);
+      dataService.updateTodos(filteredTodos);
+      setTodos(filteredTodos);
+      
+      console.log('Daily habit reset completed for', today);
+    }
   };
 
   // Handle user selection
@@ -140,103 +179,6 @@ const HabitGoalTracker = () => {
   };
   
   // Modal Components
-  const HabitModal = ({ routineId, onClose }) => {
-    const [habitName, setHabitName] = useState('');
-    const [habitDescription, setHabitDescription] = useState('');
-    const [habitDuration, setHabitDuration] = useState('');
-    const [hasDuration, setHasDuration] = useState(false);
-    
-    const handleSubmit = () => {
-      if (habitName.trim()) {
-        const duration = hasDuration && habitDuration ? parseInt(habitDuration) : null;
-        addHabitToRoutine(routineId, habitName.trim(), habitDescription.trim(), duration);
-        onClose();
-      }
-    };
-    
-    return (
-      <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
-        <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6">
-          <div className="flex justify-between items-center mb-4 pb-3 border-b border-stone-200">
-            <h3 className="text-xl font-bold text-[#333333] uppercase tracking-wide">New Habit</h3>
-            <button onClick={onClose} className="text-[#333333] hover:opacity-60">
-              <X size={24} strokeWidth={2.5} />
-            </button>
-          </div>
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-bold text-[#333333] mb-2 uppercase tracking-wider">
-                Name *
-              </label>
-              <input
-                type="text"
-                value={habitName}
-                onChange={(e) => setHabitName(e.target.value)}
-                placeholder="Morning meditation"
-                className="w-full px-3 py-2 border-2 border-stone-300 rounded-lg focus:outline-none focus:border-[#333333]"
-                autoFocus
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-bold text-[#333333] mb-2 uppercase tracking-wider">
-                Why (optional)
-              </label>
-              <textarea
-                value={habitDescription}
-                onChange={(e) => setHabitDescription(e.target.value)}
-                placeholder="Why is this habit important?"
-                className="w-full px-3 py-2 border-2 border-stone-300 rounded-lg focus:outline-none focus:border-[#333333]"
-                rows="3"
-              />
-            </div>
-            
-            <div>
-              <label className="flex items-center gap-2 mb-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={hasDuration}
-                  onChange={(e) => setHasDuration(e.target.checked)}
-                  className="w-4 h-4 text-[#333333] border-2 border-stone-300 rounded focus:ring-[#333333] focus:ring-2 cursor-pointer"
-                />
-                <span className="text-sm font-bold text-[#333333] uppercase tracking-wider">
-                  Set Timer Cap
-                </span>
-              </label>
-              {hasDuration && (
-                <div className="flex items-center gap-2 mt-2">
-                  <input
-                    type="number"
-                    value={habitDuration}
-                    onChange={(e) => setHabitDuration(e.target.value)}
-                    placeholder="20"
-                    min="1"
-                    max="1440"
-                    className="w-20 px-3 py-2 border-2 border-stone-300 rounded-lg focus:outline-none focus:border-[#333333]"
-                  />
-                  <span className="text-sm text-[#333333] font-medium">minutes</span>
-                </div>
-              )}
-            </div>
-            
-            <div className="flex gap-2 pt-2">
-              <button
-                onClick={onClose}
-                className="flex-1 px-4 py-2.5 border-2 border-[#333333] text-[#333333] rounded-lg hover:bg-stone-100 font-bold uppercase text-sm tracking-wider transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleSubmit}
-                className="flex-1 px-4 py-2.5 bg-black text-white rounded-lg hover:bg-[#333333] font-bold uppercase text-sm tracking-wider shadow-lg transition-all hover:shadow-xl hover:scale-105"
-              >
-                Add Habit
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  };
   
   const GoalModal = ({ onClose }) => {
     const [goalName, setGoalName] = useState('');
@@ -411,6 +353,16 @@ const HabitGoalTracker = () => {
     const [routineName, setRoutineName] = useState(routine?.name || '');
     const [routineTime, setRoutineTime] = useState(routine?.timeOfDay || 'morning');
     const [routineDays, setRoutineDays] = useState(routine?.days || []);
+    const [showAddHabit, setShowAddHabit] = useState(false);
+    const [editingHabitId, setEditingHabitId] = useState(null);
+    const [pendingHabits, setPendingHabits] = useState([]);
+    const [deletedHabitIds, setDeletedHabitIds] = useState([]);
+    
+    // New habit form state
+    const [newHabitName, setNewHabitName] = useState('');
+    const [newHabitDescription, setNewHabitDescription] = useState('');
+    const [newHabitDuration, setNewHabitDuration] = useState('');
+    const [newHabitHasDuration, setNewHabitHasDuration] = useState(false);
     
     const daysOfWeek = [
       { key: 'monday', label: 'Monday' },
@@ -428,6 +380,15 @@ const HabitGoalTracker = () => {
       { value: 'evening', label: 'Evening' }
     ];
     
+    // Get current habits for this routine (excluding deleted ones)
+    const getCurrentHabits = () => {
+      const routineHabits = routine?.habits || [];
+      const existingHabits = habits.filter(h => 
+        routineHabits.includes(h.id) && !deletedHabitIds.includes(h.id)
+      );
+      return [...existingHabits, ...pendingHabits];
+    };
+    
     const handleDayToggle = (day) => {
       setRoutineDays(prev => 
         prev.includes(day) 
@@ -436,85 +397,283 @@ const HabitGoalTracker = () => {
       );
     };
     
+    const handleAddHabit = () => {
+      if (newHabitName.trim()) {
+        const duration = newHabitHasDuration && newHabitDuration ? parseInt(newHabitDuration) : null;
+        const newHabit = {
+          id: Date.now(),
+          name: newHabitName.trim(),
+          description: newHabitDescription.trim(),
+          duration: duration,
+          routineId: routine.id,
+          createdAt: new Date().toISOString()
+        };
+        
+        setPendingHabits(prev => [...prev, newHabit]);
+        
+        // Reset form
+        setNewHabitName('');
+        setNewHabitDescription('');
+        setNewHabitDuration('');
+        setNewHabitHasDuration(false);
+        setShowAddHabit(false);
+      }
+    };
+    
+    const handleDeleteHabit = (habitId) => {
+      if (window.confirm('Are you sure you want to delete this habit?')) {
+        // If it's a pending habit, remove from pending
+        if (pendingHabits.some(h => h.id === habitId)) {
+          setPendingHabits(prev => prev.filter(h => h.id !== habitId));
+        } else {
+          // If it's an existing habit, mark for deletion
+          setDeletedHabitIds(prev => [...prev, habitId]);
+        }
+      }
+    };
+    
+    const handleEditHabit = (habitId) => {
+      setEditingHabitId(editingHabitId === habitId ? null : habitId);
+    };
+    
+    const handleSaveHabitEdit = (habitId, updatedHabit) => {
+      if (pendingHabits.some(h => h.id === habitId)) {
+        // Update pending habit
+        setPendingHabits(prev => prev.map(h => h.id === habitId ? updatedHabit : h));
+      } else {
+        // Update existing habit
+        const updatedHabits = habits.map(h => h.id === habitId ? updatedHabit : h);
+        setHabits(updatedHabits);
+        dataService.updateHabits(updatedHabits);
+      }
+      setEditingHabitId(null);
+    };
+    
     const handleSubmit = () => {
       if (routineName.trim() && routineDays.length > 0) {
+        // Update routine details
         const updatedRoutines = routines.map(r => 
           r.id === routine.id 
             ? { 
                 ...r, 
                 name: routineName.trim(),
                 timeOfDay: routineTime,
-                days: routineDays
+                days: routineDays,
+                habits: [...r.habits.filter(id => !deletedHabitIds.includes(id)), ...pendingHabits.map(h => h.id)]
               }
             : r
         );
         setRoutines(updatedRoutines);
         dataService.updateRoutines(updatedRoutines);
+        
+        // Add new habits
+        if (pendingHabits.length > 0) {
+          const newHabits = [...habits, ...pendingHabits];
+          setHabits(newHabits);
+          dataService.updateHabits(newHabits);
+        }
+        
+        // Remove deleted habits
+        if (deletedHabitIds.length > 0) {
+          const updatedHabits = habits.filter(h => !deletedHabitIds.includes(h.id));
+          setHabits(updatedHabits);
+          dataService.updateHabits(updatedHabits);
+        }
+        
         onClose();
       }
     };
     
+    const currentHabits = getCurrentHabits();
+    
     return (
       <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
-        <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6">
-          <div className="flex justify-between items-center mb-4 pb-3 border-b border-stone-200">
-            <h3 className="text-xl font-bold text-[#333333] uppercase tracking-wide">Edit Routine</h3>
-            <button onClick={onClose} className="text-[#333333] hover:opacity-60">
-              <X size={24} strokeWidth={2.5} />
-            </button>
-          </div>
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-bold text-[#333333] mb-2 uppercase tracking-wider">
-                Name *
-              </label>
-              <input
-                type="text"
-                value={routineName}
-                onChange={(e) => setRoutineName(e.target.value)}
-                placeholder="Morning Routine"
-                className="w-full px-3 py-2 border-2 border-stone-300 rounded-lg focus:outline-none focus:border-[#333333]"
-                autoFocus
-              />
+        <div className="bg-white rounded-2xl shadow-2xl w-full max-h-[90vh] overflow-y-auto">
+          <div className="p-6">
+            <div className="flex justify-between items-center mb-6 pb-3 border-b border-stone-200">
+              <h3 className="text-xl font-bold text-[#333333] uppercase tracking-wide">Edit Routine</h3>
+              <button onClick={onClose} className="text-[#333333] hover:opacity-60">
+                <X size={24} strokeWidth={2.5} />
+              </button>
             </div>
             
-            <div>
-              <label className="block text-sm font-bold text-[#333333] mb-2 uppercase tracking-wider">
-                Time of Day *
-              </label>
-              <select
-                value={routineTime}
-                onChange={(e) => setRoutineTime(e.target.value)}
-                className="w-full px-3 py-2 border-2 border-stone-300 rounded-lg focus:outline-none focus:border-[#333333]"
-              >
-                {timeOptions.map(option => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-            
-            <div>
-              <label className="block text-sm font-bold text-[#333333] mb-2 uppercase tracking-wider">
-                Days of Week *
-              </label>
-              <div className="grid grid-cols-2 gap-2">
-                {daysOfWeek.map(day => (
-                  <label key={day.key} className="flex items-center gap-2 cursor-pointer">
+            <div className="space-y-6">
+              {/* Routine Details Section */}
+              <div>
+                <h4 className="font-bold text-[#333333] mb-3 text-sm uppercase tracking-wide">Routine Details</h4>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-bold text-[#333333] mb-2 uppercase tracking-wider">
+                      Name *
+                    </label>
                     <input
-                      type="checkbox"
-                      checked={routineDays.includes(day.key)}
-                      onChange={() => handleDayToggle(day.key)}
-                      className="w-4 h-4 text-[#333333] border-2 border-stone-300 rounded focus:ring-[#333333]"
+                      type="text"
+                      value={routineName}
+                      onChange={(e) => setRoutineName(e.target.value)}
+                      placeholder="Morning Routine"
+                      className="w-full px-3 py-2 border-2 border-stone-300 rounded-lg focus:outline-none focus:border-[#333333]"
+                      autoFocus
                     />
-                    <span className="text-sm text-[#333333]">{day.label}</span>
-                  </label>
-                ))}
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-bold text-[#333333] mb-2 uppercase tracking-wider">
+                      Time of Day *
+                    </label>
+                    <select
+                      value={routineTime}
+                      onChange={(e) => setRoutineTime(e.target.value)}
+                      className="w-full px-3 py-2 border-2 border-stone-300 rounded-lg focus:outline-none focus:border-[#333333]"
+                    >
+                      {timeOptions.map(option => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-bold text-[#333333] mb-2 uppercase tracking-wider">
+                      Days of Week *
+                    </label>
+                    <div className="grid grid-cols-2 gap-2">
+                      {daysOfWeek.map(day => (
+                        <label key={day.key} className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={routineDays.includes(day.key)}
+                            onChange={() => handleDayToggle(day.key)}
+                            className="w-4 h-4 text-[#333333] border-2 border-stone-300 rounded focus:ring-[#333333]"
+                          />
+                          <span className="text-sm text-[#333333]">{day.label}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+              
+              {/* Habits List Section */}
+              <div>
+                <h4 className="font-bold text-[#333333] mb-3 text-sm uppercase tracking-wide">Habits</h4>
+                <div className="space-y-2">
+                  {currentHabits.length > 0 ? (
+                    currentHabits.map(habit => (
+                      <HabitItem
+                        key={habit.id}
+                        habit={habit}
+                        isEditing={editingHabitId === habit.id}
+                        onEdit={() => handleEditHabit(habit.id)}
+                        onDelete={() => handleDeleteHabit(habit.id)}
+                        onSave={(updatedHabit) => handleSaveHabitEdit(habit.id, updatedHabit)}
+                        onCancel={() => setEditingHabitId(null)}
+                      />
+                    ))
+                  ) : (
+                    <p className="text-[#333333] opacity-50 text-sm text-center py-4">No habits in this routine yet.</p>
+                  )}
+                </div>
+              </div>
+              
+              {/* Add Habit Section */}
+              <div>
+                {!showAddHabit ? (
+                  <button
+                    onClick={() => setShowAddHabit(true)}
+                    className="w-full flex items-center justify-center gap-2 bg-black text-white py-3 rounded-lg hover:bg-[#333333] font-bold uppercase text-sm tracking-wider shadow-lg transition-all hover:shadow-xl hover:scale-[1.02]"
+                  >
+                    <Plus size={20} strokeWidth={2.5} />
+                    Add Habit
+                  </button>
+                ) : (
+                  <div className="border-2 border-stone-300 rounded-lg p-4 space-y-4">
+                    <div className="flex justify-between items-center">
+                      <h5 className="font-bold text-[#333333] text-sm uppercase tracking-wide">New Habit</h5>
+                      <button
+                        onClick={() => setShowAddHabit(false)}
+                        className="text-[#333333] hover:opacity-60"
+                      >
+                        <X size={18} strokeWidth={2.5} />
+                      </button>
+                    </div>
+                    
+                    <div>
+                      <label className="block text-sm font-bold text-[#333333] mb-2 uppercase tracking-wider">
+                        Name *
+                      </label>
+                      <input
+                        type="text"
+                        value={newHabitName}
+                        onChange={(e) => setNewHabitName(e.target.value)}
+                        placeholder="Morning meditation"
+                        className="w-full px-3 py-2 border-2 border-stone-300 rounded-lg focus:outline-none focus:border-[#333333]"
+                        autoFocus
+                      />
+                    </div>
+                    
+                    <div>
+                      <label className="block text-sm font-bold text-[#333333] mb-2 uppercase tracking-wider">
+                        Why (optional)
+                      </label>
+                      <textarea
+                        value={newHabitDescription}
+                        onChange={(e) => setNewHabitDescription(e.target.value)}
+                        placeholder="Why is this habit important?"
+                        className="w-full px-3 py-2 border-2 border-stone-300 rounded-lg focus:outline-none focus:border-[#333333]"
+                        rows="2"
+                      />
+                    </div>
+                    
+                    <div>
+                      <label className="flex items-center gap-2 mb-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={newHabitHasDuration}
+                          onChange={(e) => setNewHabitHasDuration(e.target.checked)}
+                          className="w-4 h-4 text-[#333333] border-2 border-stone-300 rounded focus:ring-[#333333] focus:ring-2 cursor-pointer"
+                        />
+                        <span className="text-sm font-bold text-[#333333] uppercase tracking-wider">
+                          Set Timer Cap
+                        </span>
+                      </label>
+                      {newHabitHasDuration && (
+                        <div className="flex items-center gap-2 mt-2">
+                          <input
+                            type="number"
+                            value={newHabitDuration}
+                            onChange={(e) => setNewHabitDuration(e.target.value)}
+                            placeholder="20"
+                            min="1"
+                            max="1440"
+                            className="w-20 px-3 py-2 border-2 border-stone-300 rounded-lg focus:outline-none focus:border-[#333333]"
+                          />
+                          <span className="text-sm text-[#333333] font-medium">minutes</span>
+                        </div>
+                      )}
+                    </div>
+                    
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => setShowAddHabit(false)}
+                        className="flex-1 px-4 py-2.5 border-2 border-[#333333] text-[#333333] rounded-lg hover:bg-stone-100 font-bold uppercase text-sm tracking-wider transition-colors"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={handleAddHabit}
+                        className="flex-1 px-4 py-2.5 bg-black text-white rounded-lg hover:bg-[#333333] font-bold uppercase text-sm tracking-wider shadow-lg transition-all hover:shadow-xl hover:scale-105"
+                      >
+                        Add Habit
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
             
-            <div className="flex gap-2 pt-2">
+            {/* Footer */}
+            <div className="flex gap-2 pt-6 mt-6 border-t border-stone-200">
               <button
                 onClick={onClose}
                 className="flex-1 px-4 py-2.5 border-2 border-[#333333] text-[#333333] rounded-lg hover:bg-stone-100 font-bold uppercase text-sm tracking-wider transition-colors"
@@ -529,6 +688,197 @@ const HabitGoalTracker = () => {
               </button>
             </div>
           </div>
+        </div>
+      </div>
+    );
+  };
+  
+  // Habit Item Component for inline editing
+  const HabitItem = ({ habit, isEditing, onEdit, onDelete, onSave, onCancel }) => {
+    const [editName, setEditName] = useState(habit.name);
+    const [editDescription, setEditDescription] = useState(habit.description || '');
+    const [editDuration, setEditDuration] = useState(habit.duration || '');
+    const [editHasDuration, setEditHasDuration] = useState(!!habit.duration);
+    
+    // Timer display logic
+    const getTimerDisplay = () => {
+      if (!activeTimers[habit.id]) return null;
+      
+      const startTime = activeTimers[habit.id];
+      const duration = timerDurations[habit.id];
+      const elapsed = (Date.now() - startTime) / 1000 / 60; // in minutes
+      
+      // Reference timerUpdateTrigger to ensure re-renders when timer updates
+      const _ = timerUpdateTrigger;
+      
+      if (duration) {
+        // Capped timer
+        const remaining = Math.max(duration - elapsed, 0);
+        return {
+          elapsed: Math.floor(elapsed),
+          remaining: Math.ceil(remaining),
+          progress: Math.min((elapsed / duration) * 100, 100),
+          isCapped: true
+        };
+      } else {
+        // Uncapped timer
+        return {
+          elapsed: Math.floor(elapsed),
+          remaining: null,
+          progress: null,
+          isCapped: false
+        };
+      }
+    };
+    
+    const timerDisplay = getTimerDisplay();
+    
+    const handleSave = () => {
+      const duration = editHasDuration && editDuration ? parseInt(editDuration) : null;
+      const updatedHabit = {
+        ...habit,
+        name: editName.trim(),
+        description: editDescription.trim(),
+        duration: duration
+      };
+      onSave(updatedHabit);
+    };
+    
+    if (isEditing) {
+      return (
+        <div className="border-2 border-blue-300 rounded-lg p-3 space-y-3">
+          <div className="flex justify-between items-center">
+            <h6 className="font-bold text-[#333333] text-sm uppercase tracking-wide">Edit Habit</h6>
+            <div className="flex gap-1">
+              <button
+                onClick={handleSave}
+                className="p-1 hover:bg-green-100 rounded transition-colors"
+                title="Save"
+              >
+                <Check size={16} strokeWidth={2.5} className="text-green-600" />
+              </button>
+              <button
+                onClick={onCancel}
+                className="p-1 hover:bg-red-100 rounded transition-colors"
+                title="Cancel"
+              >
+                <X size={16} strokeWidth={2.5} className="text-red-600" />
+              </button>
+            </div>
+          </div>
+          
+          <div>
+            <label className="block text-xs font-bold text-[#333333] mb-1 uppercase tracking-wider">
+              Name *
+            </label>
+            <input
+              type="text"
+              value={editName}
+              onChange={(e) => setEditName(e.target.value)}
+              className="w-full px-2 py-1 border border-stone-300 rounded text-sm focus:outline-none focus:border-[#333333]"
+              autoFocus
+            />
+          </div>
+          
+          <div>
+            <label className="block text-xs font-bold text-[#333333] mb-1 uppercase tracking-wider">
+              Why (optional)
+            </label>
+            <textarea
+              value={editDescription}
+              onChange={(e) => setEditDescription(e.target.value)}
+              className="w-full px-2 py-1 border border-stone-300 rounded text-sm focus:outline-none focus:border-[#333333]"
+              rows="2"
+            />
+          </div>
+          
+          <div>
+            <label className="flex items-center gap-2 mb-1 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={editHasDuration}
+                onChange={(e) => setEditHasDuration(e.target.checked)}
+                className="w-3 h-3 text-[#333333] border border-stone-300 rounded focus:ring-[#333333] cursor-pointer"
+              />
+              <span className="text-xs font-bold text-[#333333] uppercase tracking-wider">
+                Set Timer Cap
+              </span>
+            </label>
+            {editHasDuration && (
+              <div className="flex items-center gap-2 mt-1">
+                <input
+                  type="number"
+                  value={editDuration}
+                  onChange={(e) => setEditDuration(e.target.value)}
+                  placeholder="20"
+                  min="1"
+                  max="1440"
+                  className="w-16 px-2 py-1 border border-stone-300 rounded text-sm focus:outline-none focus:border-[#333333]"
+                />
+                <span className="text-xs text-[#333333] font-medium">minutes</span>
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
+    
+    return (
+      <div className="flex items-center justify-between p-3 bg-stone-50 rounded-lg">
+        <div className="flex-grow">
+          <div className="font-medium text-[#333333]">{habit.name}</div>
+          {habit.description && (
+            <div className="text-sm text-[#333333] opacity-70 italic">{habit.description}</div>
+          )}
+          {habit.duration && (
+            <div className="text-xs text-[#333333] opacity-50 font-mono">
+              Timer: {habit.duration}m
+            </div>
+          )}
+          {timerDisplay && (
+            <div className="mt-2 space-y-1">
+              <div className="flex items-center gap-2">
+                {timerDisplay.isCapped ? (
+                  <>
+                    <span className="text-xs bg-blue-500 text-white px-2 py-1 font-mono rounded">
+                      {timerDisplay.remaining}m remaining
+                    </span>
+                    <span className="text-xs text-[#333333] opacity-70">
+                      ({timerDisplay.elapsed}m elapsed)
+                    </span>
+                  </>
+                ) : (
+                  <span className="text-xs bg-green-500 text-white px-2 py-1 font-mono rounded">
+                    {timerDisplay.elapsed}m elapsed
+                  </span>
+                )}
+              </div>
+              {timerDisplay.isCapped && (
+                <div className="w-full bg-stone-200 h-2 rounded-full">
+                  <div
+                    className="bg-blue-500 h-2 rounded-full transition-all"
+                    style={{ width: `${timerDisplay.progress}%` }}
+                  ></div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={onEdit}
+            className="p-1 hover:bg-stone-200 rounded transition-colors"
+            title="Edit Habit"
+          >
+            <Edit2 size={16} strokeWidth={2.5} className="text-[#333333] opacity-60" />
+          </button>
+          <button
+            onClick={onDelete}
+            className="p-1 hover:bg-red-100 rounded transition-colors"
+            title="Delete Habit"
+          >
+            <Trash2 size={16} strokeWidth={2.5} className="text-red-600" />
+          </button>
         </div>
       </div>
     );
@@ -896,11 +1246,26 @@ const HabitGoalTracker = () => {
 
     const today = getTodayString();
     const currentCompletions = habitCompletions || {};
+    const isCurrentlyComplete = currentCompletions[today]?.[habitId] || false;
+    
+    // If completing the habit and it has a timer running, stop the timer and save time
+    if (!isCurrentlyComplete && activeTimers[habitId]) {
+      stopTimer(habitId, true);
+    }
+    
+    // If starting the habit and it doesn't have a duration cap, start an uncapped timer
+    if (isCurrentlyComplete && !activeTimers[habitId]) {
+      const habit = habits.find(h => h.id === habitId);
+      if (habit && !habit.duration) {
+        startUncappedTimer(habitId);
+      }
+    }
+
     const newHabitCompletions = {
       ...currentCompletions,
       [today]: {
         ...(currentCompletions[today] || {}),
-        [habitId]: !(currentCompletions[today]?.[habitId] || false)
+        [habitId]: !isCurrentlyComplete
       }
     };
     setHabitCompletions(newHabitCompletions);
@@ -923,6 +1288,15 @@ const HabitGoalTracker = () => {
       ...prev,
       [habitId]: duration
     }));
+  };
+
+  const startUncappedTimer = (habitId) => {
+    const startTime = Date.now();
+    setActiveTimers(prev => ({
+      ...prev,
+      [habitId]: startTime
+    }));
+    // No duration set for uncapped timers
   };
 
   const stopTimer = (habitId, completed = false) => {
@@ -1062,8 +1436,12 @@ const HabitGoalTracker = () => {
     // Start timer for first incomplete habit
     const firstHabitId = routine.habits[firstIncompleteIndex];
     const firstHabit = habits.find(h => h.id === firstHabitId);
-    if (firstHabit && firstHabit.duration) {
-      startTimer(firstHabitId, firstHabit.duration);
+    if (firstHabit) {
+      if (firstHabit.duration) {
+        startTimer(firstHabitId, firstHabit.duration);
+      } else {
+        startUncappedTimer(firstHabitId);
+      }
     }
   };
 
@@ -1120,8 +1498,12 @@ const HabitGoalTracker = () => {
       setActiveRoutineIndex(nextIndex);
       const nextHabitId = activeRoutine.habits[nextIndex];
       const nextHabit = habits.find(h => h.id === nextHabitId);
-      if (nextHabit && nextHabit.duration) {
-        startTimer(nextHabitId, nextHabit.duration);
+      if (nextHabit) {
+        if (nextHabit.duration) {
+          startTimer(nextHabitId, nextHabit.duration);
+        } else {
+          startUncappedTimer(nextHabitId);
+        }
       }
     } else {
       // Routine complete
@@ -1152,8 +1534,12 @@ const HabitGoalTracker = () => {
     setActiveRoutineIndex(prevIndex);
     const prevHabitId = activeRoutine.habits[prevIndex];
     const prevHabit = habits.find(h => h.id === prevHabitId);
-    if (prevHabit && prevHabit.duration) {
-      startTimer(prevHabitId, prevHabit.duration);
+    if (prevHabit) {
+      if (prevHabit.duration) {
+        startTimer(prevHabitId, prevHabit.duration);
+      } else {
+        startUncappedTimer(prevHabitId);
+      }
     }
   };
 
@@ -1181,8 +1567,12 @@ const HabitGoalTracker = () => {
       setActiveRoutineIndex(nextIndex);
       const nextHabitId = activeRoutine.habits[nextIndex];
       const nextHabit = habits.find(h => h.id === nextHabitId);
-      if (nextHabit && nextHabit.duration) {
-        startTimer(nextHabitId, nextHabit.duration);
+      if (nextHabit) {
+        if (nextHabit.duration) {
+          startTimer(nextHabitId, nextHabit.duration);
+        } else {
+          startUncappedTimer(nextHabitId);
+        }
       }
     } else {
       // Routine complete
@@ -1217,8 +1607,12 @@ const HabitGoalTracker = () => {
     // Resume current habit timer
     const currentHabitId = activeRoutine.habits[activeRoutineIndex];
     const currentHabit = habits.find(h => h.id === currentHabitId);
-    if (currentHabit && currentHabit.duration) {
-      startTimer(currentHabitId, currentHabit.duration);
+    if (currentHabit) {
+      if (currentHabit.duration) {
+        startTimer(currentHabitId, currentHabit.duration);
+      } else {
+        startUncappedTimer(currentHabitId);
+      }
     }
     
     setRoutinePaused(false);
@@ -1289,27 +1683,6 @@ const HabitGoalTracker = () => {
     setRoutinePaused(false);
   };
   
-  // Add habit to routine
-  const addHabitToRoutine = (routineId, habitName, habitDescription = '', duration = null) => {
-    const newHabit = {
-      id: Date.now(),
-      name: habitName,
-      description: habitDescription,
-      duration: duration,
-      routineId: routineId,
-      createdAt: new Date().toISOString()
-    };
-    const newHabits = [...habits, newHabit];
-    const newRoutines = routines.map(r => 
-      r.id === routineId 
-        ? { ...r, habits: [...r.habits, newHabit.id] }
-        : r
-    );
-    setHabits(newHabits);
-    setRoutines(newRoutines);
-    dataService.updateHabits(newHabits);
-    dataService.updateRoutines(newRoutines);
-  };
   
   // Add goal
   const addGoal = (goalName) => {
@@ -1482,9 +1855,16 @@ const HabitGoalTracker = () => {
                       ) : (
                         <Circle className="text-[#333333] opacity-40" size={20} strokeWidth={2.5} />
                       )}
-                      <span className={isComplete ? "line-through text-[#333333] opacity-50" : "text-[#333333] font-medium"}>
-                        {habit.name}
-                      </span>
+                      <div className="flex flex-col">
+                        <span className={isComplete ? "line-through text-[#333333] opacity-50" : "text-[#333333] font-medium"}>
+                          {habit.name}
+                        </span>
+                        {isComplete && habitCompletionTimes[getTodayString()]?.[habitId] && (
+                          <span className="text-xs text-green-600 font-mono">
+                            Completed in {Math.round(habitCompletionTimes[getTodayString()][habitId] * 10) / 10}m
+                          </span>
+                        )}
+                      </div>
                     </div>
                     <div className="flex items-center gap-2">
                       {streak > 0 && (
@@ -1492,13 +1872,19 @@ const HabitGoalTracker = () => {
                           {streak}D
                         </span>
                       )}
-                      {habit.duration && (
+                      {(habit.duration || activeTimers[habit.id]) && (
                         <div className="flex items-center gap-1">
                           {activeTimers[habit.id] ? (
                             <>
-                              <span className="text-xs bg-blue-500 text-white px-2 py-1 font-mono rounded">
-                                {getTimerTimeRemaining(habit.id)}m
-                              </span>
+                              {habit.duration ? (
+                                <span className="text-xs bg-blue-500 text-white px-2 py-1 font-mono rounded">
+                                  {getTimerTimeRemaining(habit.id)}m
+                                </span>
+                              ) : (
+                                <span className="text-xs bg-green-500 text-white px-2 py-1 font-mono rounded">
+                                  {Math.floor((Date.now() - activeTimers[habit.id]) / 1000 / 60)}m
+                                </span>
+                              )}
                               <button
                                 onClick={(e) => {
                                   e.stopPropagation();
@@ -1521,7 +1907,7 @@ const HabitGoalTracker = () => {
                                 <X size={14} strokeWidth={2.5} className="text-red-600" />
                               </button>
                             </>
-                          ) : (
+                          ) : habit.duration ? (
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -1532,7 +1918,7 @@ const HabitGoalTracker = () => {
                             >
                               <div className="w-3 h-3 bg-green-500 rounded-full"></div>
                             </button>
-                          )}
+                          ) : null}
                           {getAverageCompletionTime(habit.id) && (
                             <span className="text-xs bg-stone-200 text-[#333333] px-2 py-1 font-mono rounded">
                               Avg: {getAverageCompletionTime(habit.id)}m
@@ -1548,6 +1934,30 @@ const HabitGoalTracker = () => {
                 <p className="text-[#333333] opacity-50 text-sm">No habits in this routine yet.</p>
               )}
             </div>
+            
+            {/* Routine Completion Info */}
+            {(() => {
+              const today = getTodayString();
+              const routineCompletion = routineCompletions[today]?.[nextRoutine.id];
+              if (routineCompletion && routineCompletion.completed) {
+                return (
+                  <div className="mt-3 p-3 bg-green-50 border border-green-200 rounded-lg">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium text-green-800">Routine Completed Today</span>
+                      <span className="text-sm font-mono text-green-600">
+                        {Math.round(routineCompletion.totalTime * 10) / 10}m total
+                      </span>
+                    </div>
+                    {routineCompletion.startTime && routineCompletion.endTime && (
+                      <div className="text-xs text-green-600 mt-1">
+                        {new Date(routineCompletion.startTime).toLocaleTimeString()} - {new Date(routineCompletion.endTime).toLocaleTimeString()}
+                      </div>
+                    )}
+                  </div>
+                );
+              }
+              return null;
+            })()}
             
             {/* Start Routine Button */}
             {nextRoutine.habits.length > 0 && (
@@ -1712,13 +2122,19 @@ const HabitGoalTracker = () => {
                           {streak}D
                         </span>
                       )}
-                      {habit.duration && (
+                      {(habit.duration || activeTimers[habit.id]) && (
                         <div className="flex items-center gap-1">
                           {activeTimers[habit.id] ? (
                             <>
-                              <span className="text-xs bg-blue-500 text-white px-2 py-1 font-mono rounded">
-                                {getTimerTimeRemaining(habit.id)}m
-                              </span>
+                              {habit.duration ? (
+                                <span className="text-xs bg-blue-500 text-white px-2 py-1 font-mono rounded">
+                                  {getTimerTimeRemaining(habit.id)}m
+                                </span>
+                              ) : (
+                                <span className="text-xs bg-green-500 text-white px-2 py-1 font-mono rounded">
+                                  {Math.floor((Date.now() - activeTimers[habit.id]) / 1000 / 60)}m
+                                </span>
+                              )}
                               <button
                                 onClick={(e) => {
                                   e.stopPropagation();
@@ -1741,7 +2157,7 @@ const HabitGoalTracker = () => {
                                 <X size={14} strokeWidth={2.5} className="text-red-600" />
                               </button>
                             </>
-                          ) : (
+                          ) : habit.duration ? (
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -1752,7 +2168,7 @@ const HabitGoalTracker = () => {
                             >
                               <div className="w-3 h-3 bg-green-500 rounded-full"></div>
                             </button>
-                          )}
+                          ) : null}
                           {getAverageCompletionTime(habit.id) && (
                             <span className="text-xs bg-stone-200 text-[#333333] px-2 py-1 font-mono rounded">
                               Avg: {getAverageCompletionTime(habit.id)}m
@@ -1780,19 +2196,8 @@ const HabitGoalTracker = () => {
               )}
             </div>
             
-            <div className="mt-3 space-y-2">
-              <button
-                onClick={() => {
-                  setSelectedRoutineForHabit(routine.id);
-                  setShowHabitModal(true);
-                }}
-                className="w-full flex items-center justify-center gap-2 bg-black text-white py-3 rounded-lg hover:bg-[#333333] font-bold uppercase text-sm tracking-wider shadow-lg transition-all hover:shadow-xl hover:scale-[1.02]"
-              >
-                <Plus size={20} strokeWidth={2.5} />
-                Add Habit
-              </button>
-              
-              {routine.habits.length > 0 && (
+            {routine.habits.length > 0 && (
+              <div className="mt-3">
                 <button
                   onClick={() => startRoutine(routine.id)}
                   disabled={activeRoutine !== null}
@@ -1801,8 +2206,8 @@ const HabitGoalTracker = () => {
                   <Play size={20} strokeWidth={2.5} />
                   {activeRoutine ? 'Routine In Progress' : 'Start Routine'}
                 </button>
-              )}
-            </div>
+              </div>
+            )}
           </div>
         ))}
       </div>
@@ -2386,15 +2791,6 @@ const HabitGoalTracker = () => {
           />
         )}
         
-        {showHabitModal && (
-          <HabitModal 
-            routineId={selectedRoutineForHabit} 
-            onClose={() => {
-              setShowHabitModal(false);
-              setSelectedRoutineForHabit(null);
-            }} 
-          />
-        )}
         
         {showGoalModal && (
           <GoalModal 
