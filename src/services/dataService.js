@@ -1,219 +1,309 @@
-// Data Service for Habit Tracker
-// This service handles data storage and can be easily migrated to Firebase
+// Firestore Data Service for Habit Tracker
+import { 
+  doc, 
+  getDoc, 
+  setDoc, 
+  updateDoc, 
+  collection, 
+  query, 
+  where, 
+  getDocs,
+  serverTimestamp 
+} from 'firebase/firestore';
+import { db } from '../config/firebase';
+import authService from './authService';
+
+// Check if Firebase is available
+const isFirebaseAvailable = () => {
+  return db !== undefined;
+};
 
 class DataService {
   constructor() {
-    this.storageKey = 'habitTrackerData';
-    this.currentUserKey = 'habitTrackerCurrentUser';
+    this.currentUser = null;
+    this.listeners = [];
+    
+    // Listen to auth state changes
+    authService.onAuthStateChanged((user) => {
+      this.currentUser = user;
+    });
   }
 
-  // User Management
-  createUser(userName, userEmail = null) {
-    const userId = this.generateUserId();
-    const userData = {
-      id: userId,
-      name: userName,
-      email: userEmail,
-      createdAt: new Date().toISOString(),
-      lastActive: new Date().toISOString(),
-      data: {
-        routines: [
-          {
-            id: 1,
-            name: "Morning Routine",
-            timeOfDay: "morning",
-            days: ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"],
-            habits: []
-          },
-          {
-            id: 2,
-            name: "Afternoon Routine",
-            timeOfDay: "afternoon",
-            days: ["monday", "tuesday", "wednesday", "thursday", "friday"],
-            habits: []
-          },
-          {
-            id: 3,
-            name: "Evening Routine",
-            timeOfDay: "evening",
-            days: ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"],
-            habits: []
-          }
-        ],
-        habits: [],
-        goals: [],
-        todos: [],
-        habitCompletions: {}
+  // Get current user ID
+  getCurrentUserId() {
+    if (!isFirebaseAvailable()) {
+      throw new Error('Firebase is not configured. Please set up your Firebase project.');
+    }
+    return this.currentUser?.uid;
+  }
+
+  // Get user document reference
+  getUserDocRef() {
+    const userId = this.getCurrentUserId();
+    if (!userId) throw new Error('No authenticated user');
+    return doc(db, 'users', userId);
+  }
+
+  // Initialize user data with default structure
+  async initializeUserData() {
+    const userId = this.getCurrentUserId();
+    if (!userId) throw new Error('No authenticated user');
+
+    const userDocRef = this.getUserDocRef();
+    const userDoc = await getDoc(userDocRef);
+
+    if (!userDoc.exists()) {
+      // Create new user document with default data
+      const defaultData = {
+        userInfo: {
+          name: this.currentUser.name,
+          email: this.currentUser.email,
+          photoURL: this.currentUser.photoURL,
+          createdAt: serverTimestamp(),
+          lastActive: serverTimestamp()
+        },
+        data: {
+          routines: [
+            {
+              id: 1,
+              name: "Morning Routine",
+              timeOfDay: "morning",
+              days: ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"],
+              habits: []
+            },
+            {
+              id: 2,
+              name: "Afternoon Routine",
+              timeOfDay: "afternoon",
+              days: ["monday", "tuesday", "wednesday", "thursday", "friday"],
+              habits: []
+            },
+            {
+              id: 3,
+              name: "Evening Routine",
+              timeOfDay: "evening",
+              days: ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"],
+              habits: []
+            }
+          ],
+          habits: [],
+          goals: [],
+          todos: [],
+          habitCompletions: {},
+          habitCompletionTimes: {},
+          routineCompletions: {}
+        }
+      };
+
+      await setDoc(userDocRef, defaultData);
+      return defaultData;
+    }
+
+    return userDoc.data();
+  }
+
+  // Get current user data
+  async getCurrentUserData() {
+    try {
+      const userDocRef = this.getUserDocRef();
+      const userDoc = await getDoc(userDocRef);
+      
+      if (!userDoc.exists()) {
+        return await this.initializeUserData();
       }
-    };
-
-    this.saveUser(userData);
-    this.setCurrentUser(userId);
-    return userData;
-  }
-
-  getCurrentUser() {
-    const userId = localStorage.getItem(this.currentUserKey);
-    if (!userId) return null;
-    
-    const allUsers = this.getAllUsers();
-    return allUsers.find(user => user.id === userId) || null;
-  }
-
-  setCurrentUser(userId) {
-    localStorage.setItem(this.currentUserKey, userId);
-  }
-
-  getAllUsers() {
-    const data = localStorage.getItem(this.storageKey);
-    return data ? JSON.parse(data) : [];
-  }
-
-  saveUser(userData) {
-    const allUsers = this.getAllUsers();
-    const existingUserIndex = allUsers.findIndex(user => user.id === userData.id);
-    
-    if (existingUserIndex >= 0) {
-      allUsers[existingUserIndex] = userData;
-    } else {
-      allUsers.push(userData);
-    }
-    
-    localStorage.setItem(this.storageKey, JSON.stringify(allUsers));
-  }
-
-  deleteUser(userId) {
-    const allUsers = this.getAllUsers();
-    const filteredUsers = allUsers.filter(user => user.id !== userId);
-    localStorage.setItem(this.storageKey, JSON.stringify(filteredUsers));
-    
-    // If deleted user was current user, clear current user
-    const currentUserId = localStorage.getItem(this.currentUserKey);
-    if (currentUserId === userId) {
-      localStorage.removeItem(this.currentUserKey);
+      
+      return userDoc.data();
+    } catch (error) {
+      console.error('Error getting user data:', error);
+      throw error;
     }
   }
 
-  // Data Management for Current User
-  getCurrentUserData() {
-    const currentUser = this.getCurrentUser();
-    return currentUser ? currentUser.data : null;
-  }
-
-  updateCurrentUserData(data) {
-    const currentUser = this.getCurrentUser();
-    if (!currentUser) return false;
-
-    currentUser.data = data;
-    currentUser.lastActive = new Date().toISOString();
-    this.saveUser(currentUser);
-    return true;
+  // Update user data
+  async updateUserData(data) {
+    try {
+      const userDocRef = this.getUserDocRef();
+      await updateDoc(userDocRef, {
+        'data': data,
+        'userInfo.lastActive': serverTimestamp()
+      });
+    } catch (error) {
+      console.error('Error updating user data:', error);
+      throw error;
+    }
   }
 
   // Specific Data Getters
-  getRoutines() {
-    const userData = this.getCurrentUserData();
-    return userData ? userData.routines : [];
+  async getRoutines() {
+    const userData = await this.getCurrentUserData();
+    return userData?.data?.routines || [];
   }
 
-  getHabits() {
-    const userData = this.getCurrentUserData();
-    return userData ? userData.habits : [];
+  async getHabits() {
+    const userData = await this.getCurrentUserData();
+    return userData?.data?.habits || [];
   }
 
-  getGoals() {
-    const userData = this.getCurrentUserData();
-    return userData ? userData.goals : [];
+  async getGoals() {
+    const userData = await this.getCurrentUserData();
+    return userData?.data?.goals || [];
   }
 
-  getTodos() {
-    const userData = this.getCurrentUserData();
-    return userData ? userData.todos : [];
+  async getTodos() {
+    const userData = await this.getCurrentUserData();
+    return userData?.data?.todos || [];
   }
 
-  getHabitCompletions() {
-    const userData = this.getCurrentUserData();
-    return userData ? userData.habitCompletions : {};
+  async getHabitCompletions() {
+    const userData = await this.getCurrentUserData();
+    return userData?.data?.habitCompletions || {};
+  }
+
+  async getHabitCompletionTimes() {
+    const userData = await this.getCurrentUserData();
+    return userData?.data?.habitCompletionTimes || {};
+  }
+
+  async getRoutineCompletions() {
+    const userData = await this.getCurrentUserData();
+    return userData?.data?.routineCompletions || {};
   }
 
   // Specific Data Setters
-  updateRoutines(routines) {
-    const userData = this.getCurrentUserData();
-    if (!userData) return false;
+  async updateRoutines(routines) {
+    const userData = await this.getCurrentUserData();
+    if (!userData) throw new Error('No user data found');
     
-    userData.routines = routines;
-    return this.updateCurrentUserData(userData);
+    userData.data.routines = routines;
+    await this.updateUserData(userData.data);
   }
 
-  updateHabits(habits) {
-    const userData = this.getCurrentUserData();
-    if (!userData) return false;
+  async updateHabits(habits) {
+    const userData = await this.getCurrentUserData();
+    if (!userData) throw new Error('No user data found');
     
-    userData.habits = habits;
-    return this.updateCurrentUserData(userData);
+    userData.data.habits = habits;
+    await this.updateUserData(userData.data);
   }
 
-  updateGoals(goals) {
-    const userData = this.getCurrentUserData();
-    if (!userData) return false;
+  async updateGoals(goals) {
+    const userData = await this.getCurrentUserData();
+    if (!userData) throw new Error('No user data found');
     
-    userData.goals = goals;
-    return this.updateCurrentUserData(userData);
+    userData.data.goals = goals;
+    await this.updateUserData(userData.data);
   }
 
-  updateTodos(todos) {
-    const userData = this.getCurrentUserData();
-    if (!userData) return false;
+  async updateTodos(todos) {
+    const userData = await this.getCurrentUserData();
+    if (!userData) throw new Error('No user data found');
     
-    userData.todos = todos;
-    return this.updateCurrentUserData(userData);
+    userData.data.todos = todos;
+    await this.updateUserData(userData.data);
   }
 
-  updateHabitCompletions(habitCompletions) {
-    const userData = this.getCurrentUserData();
-    if (!userData) return false;
+  async updateHabitCompletions(habitCompletions) {
+    const userData = await this.getCurrentUserData();
+    if (!userData) throw new Error('No user data found');
     
-    userData.habitCompletions = habitCompletions;
-    return this.updateCurrentUserData(userData);
+    userData.data.habitCompletions = habitCompletions;
+    await this.updateUserData(userData.data);
+  }
+
+  async updateHabitCompletionTimes(habitCompletionTimes) {
+    const userData = await this.getCurrentUserData();
+    if (!userData) throw new Error('No user data found');
+    
+    userData.data.habitCompletionTimes = habitCompletionTimes;
+    await this.updateUserData(userData.data);
+  }
+
+  async updateRoutineCompletions(routineCompletions) {
+    const userData = await this.getCurrentUserData();
+    if (!userData) throw new Error('No user data found');
+    
+    userData.data.routineCompletions = routineCompletions;
+    await this.updateUserData(userData.data);
   }
 
   // Data Export/Import
-  exportUserData(userId = null) {
-    const targetUserId = userId || this.getCurrentUser()?.id;
-    if (!targetUserId) return null;
+  async exportUserData() {
+    try {
+      const userData = await this.getCurrentUserData();
+      if (!userData) return null;
 
-    const allUsers = this.getAllUsers();
-    const user = allUsers.find(u => u.id === targetUserId);
-    
-    if (!user) return null;
-
-    return {
-      version: "1.0",
-      exportDate: new Date().toISOString(),
-      userData: user.data,
-      userInfo: {
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        createdAt: user.createdAt
-      }
-    };
+      return {
+        version: "1.0",
+        exportDate: new Date().toISOString(),
+        userData: userData.data,
+        userInfo: userData.userInfo
+      };
+    } catch (error) {
+      console.error('Error exporting user data:', error);
+      throw error;
+    }
   }
 
-  importUserData(importData, userId = null) {
-    const targetUserId = userId || this.getCurrentUser()?.id;
-    if (!targetUserId || !importData.userData) return false;
+  async importUserData(importData) {
+    try {
+      if (!importData.userData) throw new Error('Invalid import data');
 
-    const allUsers = this.getAllUsers();
-    const userIndex = allUsers.findIndex(u => u.id === targetUserId);
-    
-    if (userIndex < 0) return false;
+      const userData = await this.getCurrentUserData();
+      if (!userData) throw new Error('No user data found');
 
-    allUsers[userIndex].data = importData.userData;
-    allUsers[userIndex].lastActive = new Date().toISOString();
-    
-    localStorage.setItem(this.storageKey, JSON.stringify(allUsers));
-    return true;
+      userData.data = importData.userData;
+      await this.updateUserData(userData.data);
+      return true;
+    } catch (error) {
+      console.error('Error importing user data:', error);
+      throw error;
+    }
+  }
+
+  // Ensure default routines exist for current user
+  async ensureDefaultRoutines() {
+    try {
+      const userData = await this.getCurrentUserData();
+      if (!userData) return false;
+
+      const defaultRoutines = [
+        {
+          id: 1,
+          name: "Morning Routine",
+          timeOfDay: "morning",
+          days: ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"],
+          habits: []
+        },
+        {
+          id: 2,
+          name: "Afternoon Routine",
+          timeOfDay: "afternoon",
+          days: ["monday", "tuesday", "wednesday", "thursday", "friday"],
+          habits: []
+        },
+        {
+          id: 3,
+          name: "Evening Routine",
+          timeOfDay: "evening",
+          days: ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"],
+          habits: []
+        }
+      ];
+
+      // Check if we need to add any missing default routines
+      const existingRoutineIds = userData.data.routines.map(r => r.id);
+      const missingRoutines = defaultRoutines.filter(r => !existingRoutineIds.includes(r.id));
+      
+      if (missingRoutines.length > 0) {
+        userData.data.routines = [...userData.data.routines, ...missingRoutines];
+        await this.updateUserData(userData.data);
+      }
+      
+      return true;
+    } catch (error) {
+      console.error('Error ensuring default routines:', error);
+      return false;
+    }
   }
 
   // Utility Functions
@@ -221,27 +311,9 @@ class DataService {
     return 'user_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
   }
 
-  // Firebase Migration Helpers (for future use)
-  prepareForFirebase() {
-    const currentUser = this.getCurrentUser();
-    if (!currentUser) return null;
-
-    return {
-      userId: currentUser.id,
-      userInfo: {
-        name: currentUser.name,
-        email: currentUser.email,
-        createdAt: currentUser.createdAt,
-        lastActive: currentUser.lastActive
-      },
-      userData: currentUser.data
-    };
-  }
-
-  // Clear all data (for testing/reset)
+  // Clear all data (for testing/reset) - Note: This only clears local state, not Firestore
   clearAllData() {
-    localStorage.removeItem(this.storageKey);
-    localStorage.removeItem(this.currentUserKey);
+    console.warn('clearAllData() is not supported in Firestore mode. Data is stored in the cloud.');
   }
 }
 

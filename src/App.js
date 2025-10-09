@@ -1,11 +1,12 @@
 import React from 'react';
 import HabitGoalTracker from './components/HabitGoalTracker';
+import AuthWrapper from './components/AuthWrapper';
 
 function App() {
   return (
-    <div className="App">
+    <AuthWrapper>
       <HabitGoalTracker />
-    </div>
+    </AuthWrapper>
   );
 }
 
