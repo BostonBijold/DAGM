@@ -1,26 +1,28 @@
 import React, { useState, useEffect } from 'react';
-import { Check, Circle, Plus, X, ChevronRight, Home, Target, Calendar, CheckSquare, Edit2, Trash2, Download, Upload, TrendingUp, ChevronLeft, User, Play } from 'lucide-react';
+import { Check, Circle, Plus, X, ChevronRight, Home, Target, Calendar, CheckSquare, Edit2, Trash2, Download, Upload, TrendingUp, ChevronLeft, User, Play, Pause, SkipBack, SkipForward, CheckCircle } from 'lucide-react';
 import dataService from '../services/dataService';
-import UserManager from './UserManager';
-import { debugStorage, addTestData } from '../utils/debugStorage';
+import authService from '../services/authService';
 
 const HabitGoalTracker = () => {
   const [currentView, setCurrentView] = useState('dashboard');
+  const [showRoutineView, setShowRoutineView] = useState(false);
   const [currentDate, setCurrentDate] = useState(new Date());
   const [showGoalModal, setShowGoalModal] = useState(false);
   const [showTaskModal, setShowTaskModal] = useState(false);
   const [selectedGoalForTask, setSelectedGoalForTask] = useState(null);
   const [showDataMenu, setShowDataMenu] = useState(false);
-  const [showUserManager, setShowUserManager] = useState(false);
   const [currentUser, setCurrentUser] = useState(null);
+  const [loading, setLoading] = useState(true);
   const [showRoutineEditModal, setShowRoutineEditModal] = useState(false);
   const [editingRoutine, setEditingRoutine] = useState(null);
   const [showHabitEditModal, setShowHabitEditModal] = useState(false);
   const [editingHabit, setEditingHabit] = useState(null);
   const [activeTimers, setActiveTimers] = useState({});
   const [timerDurations, setTimerDurations] = useState({});
+  const [pausedTimers, setPausedTimers] = useState({}); // Track paused timers with elapsed time
   const [showHistory, setShowHistory] = useState(false);
   const [timerUpdateTrigger, setTimerUpdateTrigger] = useState(0);
+  const [showUserManager, setShowUserManager] = useState(false);
   
   // Sample motivational quotes
   const quotes = [
@@ -60,32 +62,65 @@ const HabitGoalTracker = () => {
   
   // Initialize data from data service
   useEffect(() => {
-    // Debug localStorage on startup
-    debugStorage();
-    
-    const user = dataService.getCurrentUser();
-    if (user) {
-      setCurrentUser(user);
-      loadUserData();
-      checkAndResetDailyHabits();
-    } else {
-      // No user found, show user manager
-      setShowUserManager(true);
-    }
+    const initializeApp = async () => {
+      try {
+        setLoading(true);
+        const user = authService.getCurrentUser();
+        if (user) {
+          setCurrentUser(user);
+          await loadUserData();
+          checkAndResetDailyHabits();
+        }
+      } catch (error) {
+        console.error('Error initializing app:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    initializeApp();
   }, []);
 
-  // Load user data from data service
-  const loadUserData = () => {
-    // Ensure default routines exist
-    dataService.ensureDefaultRoutines();
+  // Timer update effect - updates every second when there are active or paused timers
+  useEffect(() => {
+    const hasActiveTimers = Object.keys(activeTimers).length > 0;
+    const hasPausedTimers = Object.keys(pausedTimers).length > 0;
     
-    setRoutines(dataService.getRoutines());
-    setHabits(dataService.getHabits());
-    setGoals(dataService.getGoals());
-    setTodos(dataService.getTodos());
-    setHabitCompletions(dataService.getHabitCompletions());
-    setHabitCompletionTimes(dataService.getHabitCompletionTimes());
-    setRoutineCompletions(dataService.getRoutineCompletions());
+    if (hasActiveTimers || hasPausedTimers) {
+      const interval = setInterval(() => {
+        setTimerUpdateTrigger(prev => prev + 1);
+      }, 1000); // Update every second
+      
+      return () => clearInterval(interval);
+    }
+  }, [activeTimers, pausedTimers]);
+
+  // Load user data from data service
+  const loadUserData = async () => {
+    try {
+      // Ensure default routines exist
+      await dataService.ensureDefaultRoutines();
+      
+      const [routinesData, habitsData, goalsData, todosData, habitCompletionsData, habitCompletionTimesData, routineCompletionsData] = await Promise.all([
+        dataService.getRoutines(),
+        dataService.getHabits(),
+        dataService.getGoals(),
+        dataService.getTodos(),
+        dataService.getHabitCompletions(),
+        dataService.getHabitCompletionTimes(),
+        dataService.getRoutineCompletions()
+      ]);
+      
+      setRoutines(routinesData);
+      setHabits(habitsData);
+      setGoals(goalsData);
+      setTodos(todosData);
+      setHabitCompletions(habitCompletionsData);
+      setHabitCompletionTimes(habitCompletionTimesData);
+      setRoutineCompletions(routineCompletionsData);
+    } catch (error) {
+      console.error('Error loading user data:', error);
+    }
   };
 
   // Auto-expand the next incomplete routine when data changes
@@ -99,7 +134,7 @@ const HabitGoalTracker = () => {
   }, [routines, habitCompletions, currentDate]);
 
   // Check if we need to reset habits for a new day
-  const checkAndResetDailyHabits = () => {
+  const checkAndResetDailyHabits = async () => {
     const today = getTodayString();
     const lastResetDate = localStorage.getItem('habitTrackerLastResetDate');
     
@@ -118,8 +153,8 @@ const HabitGoalTracker = () => {
       }
       
       // Update the data
-      dataService.updateHabitCompletions(currentCompletions);
-      dataService.updateHabitCompletionTimes(currentCompletionTimes);
+      await dataService.updateHabitCompletions(currentCompletions);
+      await dataService.updateHabitCompletionTimes(currentCompletionTimes);
       
       // Update local state
       setHabitCompletions(currentCompletions);
@@ -129,9 +164,9 @@ const HabitGoalTracker = () => {
       localStorage.setItem('habitTrackerLastResetDate', today);
       
       // Also reset daily todos (remove todos that were added today)
-      const currentTodos = dataService.getTodos();
+      const currentTodos = await dataService.getTodos();
       const filteredTodos = currentTodos.filter(todo => todo.addedAt !== today);
-      dataService.updateTodos(filteredTodos);
+      await dataService.updateTodos(filteredTodos);
       setTodos(filteredTodos);
       
       console.log('Daily habit reset completed for', today);
@@ -196,7 +231,7 @@ const HabitGoalTracker = () => {
     const [goalDescription, setGoalDescription] = useState('');
     const [goalDeadline, setGoalDeadline] = useState('');
     
-    const handleSubmit = () => {
+    const handleSubmit = async () => {
       if (goalName.trim()) {
         const newGoal = {
           id: Date.now(),
@@ -209,7 +244,7 @@ const HabitGoalTracker = () => {
         };
         const newGoals = [...goals, newGoal];
         setGoals(newGoals);
-        dataService.updateGoals(newGoals);
+        await await dataService.updateGoals(newGoals);
         onClose();
       }
     };
@@ -284,7 +319,7 @@ const HabitGoalTracker = () => {
     const [taskName, setTaskName] = useState('');
     const [taskNotes, setTaskNotes] = useState('');
     
-    const handleSubmit = () => {
+    const handleSubmit = async () => {
       if (taskName.trim()) {
         const newGoals = goals.map(g => 
           g.id === goalId
@@ -300,7 +335,7 @@ const HabitGoalTracker = () => {
             : g
         );
         setGoals(newGoals);
-        dataService.updateGoals(newGoals);
+        await await dataService.updateGoals(newGoals);
         onClose();
       }
     };
@@ -453,7 +488,7 @@ const HabitGoalTracker = () => {
       setEditingHabitId(editingHabitId === habitId ? null : habitId);
     };
     
-    const handleSaveHabitEdit = (habitId, updatedHabit) => {
+    const handleSaveHabitEdit = async (habitId, updatedHabit) => {
       if (pendingHabits.some(h => h.id === habitId)) {
         // Update pending habit
         setPendingHabits(prev => prev.map(h => h.id === habitId ? updatedHabit : h));
@@ -461,12 +496,12 @@ const HabitGoalTracker = () => {
         // Update existing habit
         const updatedHabits = habits.map(h => h.id === habitId ? updatedHabit : h);
         setHabits(updatedHabits);
-        dataService.updateHabits(updatedHabits);
+        await dataService.updateHabits(updatedHabits);
       }
       setEditingHabitId(null);
     };
     
-    const handleSubmit = () => {
+    const handleSubmit = async () => {
       if (routineName.trim() && routineDays.length > 0) {
         // Update routine details
         const updatedRoutines = routines.map(r => 
@@ -481,20 +516,20 @@ const HabitGoalTracker = () => {
             : r
         );
         setRoutines(updatedRoutines);
-        dataService.updateRoutines(updatedRoutines);
+        await dataService.updateRoutines(updatedRoutines);
         
         // Add new habits
         if (pendingHabits.length > 0) {
           const newHabits = [...habits, ...pendingHabits];
           setHabits(newHabits);
-          dataService.updateHabits(newHabits);
+          await dataService.updateHabits(newHabits);
         }
         
         // Remove deleted habits
         if (deletedHabitIds.length > 0) {
           const updatedHabits = habits.filter(h => !deletedHabitIds.includes(h.id));
           setHabits(updatedHabits);
-          dataService.updateHabits(updatedHabits);
+          await dataService.updateHabits(updatedHabits);
         }
         
         onClose();
@@ -980,7 +1015,7 @@ const HabitGoalTracker = () => {
     const [expectedCompletionTime, setExpectedCompletionTime] = useState(habit?.expectedCompletionTime || '');
     const [hasExpectedTime, setHasExpectedTime] = useState(!!habit?.expectedCompletionTime);
     
-    const handleSubmit = () => {
+    const handleSubmit = async () => {
       if (habitName.trim()) {
         const duration = hasDuration && habitDuration ? parseInt(habitDuration) : null;
         const expectedTime = hasExpectedTime && expectedCompletionTime ? parseInt(expectedCompletionTime) : null;
@@ -996,7 +1031,7 @@ const HabitGoalTracker = () => {
             : h
         );
         setHabits(updatedHabits);
-        dataService.updateHabits(updatedHabits);
+        await dataService.updateHabits(updatedHabits);
         onClose();
       }
     };
@@ -1114,8 +1149,78 @@ const HabitGoalTracker = () => {
     );
   };
 
-  // Routine Overlay Component
-  const RoutineOverlay = () => {
+  // Circular Progress Component
+  const CircularProgress = ({ habitId, size = 200, strokeWidth = 8 }) => {
+    const progress = getCircularProgress(habitId);
+    const color = getTimerColor(habitId);
+    const displayTime = getTimerDisplayTime(habitId);
+    const mode = getTimerDisplayMode(habitId);
+    
+    const radius = (size - strokeWidth) / 2;
+    const circumference = radius * 2 * Math.PI;
+    const strokeDasharray = circumference;
+    const strokeDashoffset = circumference - (progress / 100) * circumference;
+    
+    return (
+      <div 
+        className="relative cursor-pointer hover:scale-105 transition-transform duration-200" 
+        style={{ width: size, height: size }}
+        onClick={() => handleTimerTap(habitId)}
+        title={activeTimers[habitId] ? "Tap to pause" : pausedTimers[habitId] !== undefined ? "Tap to resume" : "Tap to start"}
+      >
+        <svg
+          width={size}
+          height={size}
+          className="transform -rotate-90"
+        >
+          {/* Background circle */}
+          <circle
+            cx={size / 2}
+            cy={size / 2}
+            r={radius}
+            stroke="#e5e7eb"
+            strokeWidth={strokeWidth}
+            fill="transparent"
+          />
+          {/* Progress circle */}
+          <circle
+            cx={size / 2}
+            cy={size / 2}
+            r={radius}
+            stroke={color}
+            strokeWidth={strokeWidth}
+            fill="transparent"
+            strokeDasharray={strokeDasharray}
+            strokeDashoffset={strokeDashoffset}
+            strokeLinecap="round"
+            className="transition-all duration-300 ease-in-out"
+          />
+        </svg>
+        {/* Center content */}
+        <div className="absolute inset-0 flex flex-col items-center justify-center">
+          <div className="text-4xl font-bold text-[#333333] font-mono">
+            {displayTime !== null ? displayTime : '0:00'}
+          </div>
+          <div className="text-xs text-[#333333] opacity-60 uppercase tracking-wide mb-2">
+            {mode === 'countdown' ? 'remaining' : mode === 'countup' ? 'elapsed' : mode === 'overestimate' ? 'over' : 'ready'}
+          </div>
+          {/* Play/Pause Icon */}
+          <div className="text-[#333333] opacity-70">
+            {activeTimers[habitId] ? (
+              <Pause size={16} strokeWidth={2.5} />
+            ) : pausedTimers[habitId] !== undefined ? (
+              <Play size={16} strokeWidth={2.5} className="ml-0.5" />
+            ) : (
+              <Play size={16} strokeWidth={2.5} className="ml-0.5" />
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  // Routine View Component - Music Player Style
+  const RoutineView = () => {
     if (!activeRoutine) return null;
 
     const currentHabitId = activeRoutine.habits[activeRoutineIndex];
@@ -1133,12 +1238,12 @@ const HabitGoalTracker = () => {
     };
 
     return (
-      <div className="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-50 p-4">
-        <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+      <div className="min-h-screen bg-[#333333] text-white">
+        <div className="max-w-md mx-auto bg-white text-[#333333] min-h-screen flex flex-col">
           {/* Header */}
           <div className="p-6 border-b border-stone-200">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-2xl font-bold text-[#333333] uppercase tracking-wide">
+              <h2 className="text-xl font-bold text-[#333333] uppercase tracking-wide">
                 {activeRoutine.name}
               </h2>
               <button
@@ -1146,123 +1251,83 @@ const HabitGoalTracker = () => {
                 className="p-2 hover:bg-stone-100 rounded-lg transition-colors"
                 title="Stop Routine"
               >
-                <X size={24} strokeWidth={2.5} className="text-[#333333]" />
+                <X size={20} strokeWidth={2.5} className="text-[#333333]" />
               </button>
             </div>
             
-            <div className="flex items-center justify-between">
-              <div className="text-center">
-                <p className="text-sm text-[#333333] opacity-70 uppercase tracking-wider">Progress</p>
-                <p className="text-lg font-bold text-[#333333]">
+            <div className="flex items-center justify-between text-center">
+              <div>
+                <p className="text-xs text-[#333333] opacity-70 uppercase tracking-wider">Progress</p>
+                <p className="text-sm font-bold text-[#333333]">
                   {activeRoutineIndex + 1} / {activeRoutine.habits.length}
                 </p>
               </div>
-              <div className="text-center">
-                <p className="text-sm text-[#333333] opacity-70 uppercase tracking-wider">Total Time</p>
-                <p className="text-lg font-bold text-[#333333] font-mono">
+              <div>
+                <p className="text-xs text-[#333333] opacity-70 uppercase tracking-wider">Total Time</p>
+                <p className="text-sm font-bold text-[#333333] font-mono">
                   {Math.floor(routineElapsed)}m {Math.round((routineElapsed % 1) * 60)}s
                 </p>
               </div>
             </div>
           </div>
 
-          {/* Current Habit Display */}
+          {/* Current Habit Display - Music Player Style */}
           {currentHabit && (
-            <div className="p-6 border-b border-stone-200">
-              <div className="text-center mb-6">
-                <h3 className="text-3xl font-bold text-[#333333] mb-2">
-                  {currentHabit.name}
-                </h3>
-                {currentHabit.description && (
-                  <p className="text-lg text-[#333333] opacity-70 italic">
-                    {currentHabit.description}
-                  </p>
-                )}
-              </div>
-
-              {/* Timer Display */}
-              {currentHabit.duration && (
-                <div className="text-center mb-6">
-                  {activeTimers[currentHabit.id] ? (
-                    <div>
-                      <div className="text-4xl font-bold text-[#333333] font-mono mb-2">
-                        {getTimerTimeRemaining(currentHabit.id)}m
-                      </div>
-                      <div className="w-full bg-stone-200 h-3 rounded-full mb-4">
-                        <div
-                          className="bg-blue-500 h-3 rounded-full transition-all"
-                          style={{ width: `${getTimerProgress(currentHabit.id)}%` }}
-                        ></div>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="text-2xl text-[#333333] opacity-50">
-                      {routinePaused ? 'Paused' : 'Ready to Start'}
-                    </div>
-                  )}
-                </div>
+            <div className="p-8 text-center">
+              {/* Habit Name */}
+              <h3 className="text-2xl font-bold text-[#333333] mb-2">
+                {currentHabit.name}
+              </h3>
+              {currentHabit.description && (
+                <p className="text-sm text-[#333333] opacity-70 mb-8">
+                  {currentHabit.description}
+                </p>
               )}
 
-              {/* Action Buttons */}
-              <div className="flex justify-center gap-4">
-                {activeTimers[currentHabit.id] ? (
-                  <>
-                    <button
-                      onClick={() => completeRoutineHabit(currentHabit.id)}
-                      className="px-6 py-3 bg-green-500 text-white rounded-lg hover:bg-green-600 font-bold uppercase text-sm tracking-wider shadow-lg transition-all hover:shadow-xl hover:scale-105"
-                    >
-                      Complete
-                    </button>
-                    <button
-                      onClick={routinePaused ? resumeRoutine : pauseRoutine}
-                      className="px-6 py-3 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 font-bold uppercase text-sm tracking-wider shadow-lg transition-all hover:shadow-xl hover:scale-105"
-                    >
-                      {routinePaused ? 'Resume' : 'Pause'}
-                    </button>
-                  </>
-                ) : (
-                  <button
-                    onClick={() => {
-                      if (currentHabit.duration) {
-                        startTimer(currentHabit.id, currentHabit.duration);
-                      } else {
-                        completeRoutineHabit(currentHabit.id);
-                      }
-                    }}
-                    className="px-6 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 font-bold uppercase text-sm tracking-wider shadow-lg transition-all hover:shadow-xl hover:scale-105"
-                  >
-                    {currentHabit.duration ? 'Start Timer' : 'Mark Complete'}
-                  </button>
-                )}
+              {/* Circular Timer */}
+              <div className="flex justify-center mb-8">
+                <CircularProgress habitId={currentHabit.id} size={240} strokeWidth={10} />
+              </div>
+
+              {/* Music Player Controls */}
+              <div className="flex items-center justify-center gap-8 mb-8">
+                {/* Skip Back */}
+                <button
+                  onClick={goToPreviousHabit}
+                  disabled={activeRoutineIndex <= 0}
+                  className="p-3 rounded-full bg-stone-100 hover:bg-stone-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  title="Previous Habit"
+                >
+                  <SkipBack size={24} strokeWidth={2.5} className="text-[#333333]" />
+                </button>
+
+                {/* Complete Button */}
+                <button
+                  onClick={() => completeRoutineHabit(currentHabit.id)}
+                  className="p-4 rounded-full bg-green-500 hover:bg-green-600 transition-colors shadow-lg"
+                  title="Mark Complete"
+                >
+                  <CheckCircle size={28} strokeWidth={2.5} className="text-white" />
+                </button>
+
+                {/* Skip Forward */}
+                <button
+                  onClick={skipCurrentHabit}
+                  className="p-3 rounded-full bg-stone-100 hover:bg-stone-200 transition-colors"
+                  title="Next Habit"
+                >
+                  <SkipForward size={24} strokeWidth={2.5} className="text-[#333333]" />
+                </button>
               </div>
             </div>
           )}
 
-          {/* Navigation Controls */}
-          <div className="p-6 border-b border-stone-200">
-            <div className="flex justify-center gap-4">
-              <button
-                onClick={goToPreviousHabit}
-                disabled={activeRoutineIndex <= 0}
-                className="px-4 py-2 bg-stone-200 text-[#333333] rounded-lg hover:bg-stone-300 font-bold uppercase text-sm tracking-wider transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                ← Back
-              </button>
-              <button
-                onClick={skipCurrentHabit}
-                className="px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 font-bold uppercase text-sm tracking-wider transition-all hover:shadow-lg"
-              >
-                Skip
-              </button>
-            </div>
-          </div>
-
-          {/* Habit List Preview */}
-          <div className="p-6">
+          {/* Habit Playlist */}
+          <div className="p-6 border-t border-stone-200 flex-1 overflow-hidden flex flex-col">
             <h4 className="font-bold text-[#333333] mb-4 text-sm uppercase tracking-wide">
-              Routine Progress
+              Upcoming Habits
             </h4>
-            <div className="space-y-2">
+            <div className="space-y-2 flex-1 overflow-y-auto">
               {activeRoutine.habits.map((habitId, index) => {
                 const habit = habits.find(h => h.id === habitId);
                 if (!habit) return null;
@@ -1273,9 +1338,9 @@ const HabitGoalTracker = () => {
                 return (
                   <div
                     key={habitId}
-                    className={`flex items-center justify-between p-3 rounded-lg ${
+                    className={`flex items-center justify-between p-3 rounded-lg transition-colors ${
                       isCurrent 
-                        ? 'bg-blue-100 border-2 border-blue-500' 
+                        ? 'bg-blue-50 border border-blue-200' 
                         : isComplete 
                           ? 'bg-green-50 border border-green-200' 
                           : 'bg-stone-50 border border-stone-200'
@@ -1283,15 +1348,15 @@ const HabitGoalTracker = () => {
                   >
                     <div className="flex items-center gap-3">
                       {isComplete ? (
-                        <CheckSquare className="text-green-600" size={20} strokeWidth={2.5} />
+                        <CheckCircle className="text-green-600" size={18} strokeWidth={2.5} />
                       ) : isCurrent ? (
-                        <div className="w-5 h-5 border-2 border-blue-500 rounded-full flex items-center justify-center">
+                        <div className="w-4 h-4 border-2 border-blue-500 rounded-full flex items-center justify-center">
                           <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
                         </div>
                       ) : (
-                        <Circle className="text-[#333333] opacity-40" size={20} strokeWidth={2.5} />
+                        <X className="text-[#333333] opacity-40" size={18} strokeWidth={2.5} />
                       )}
-                      <span className={`font-medium ${
+                      <span className={`text-sm font-medium ${
                         isComplete ? 'text-green-700' : isCurrent ? 'text-blue-700' : 'text-[#333333]'
                       }`}>
                         {habit.name}
@@ -1305,7 +1370,12 @@ const HabitGoalTracker = () => {
                       )}
                       {isCurrent && (
                         <span className="text-xs bg-blue-200 text-blue-800 px-2 py-1 font-mono rounded">
-                          Current
+                          Now
+                        </span>
+                      )}
+                      {habit.duration && !isComplete && !isCurrent && (
+                        <span className="text-xs bg-stone-200 text-stone-600 px-2 py-1 font-mono rounded">
+                          {habit.duration}m
                         </span>
                       )}
                     </div>
@@ -1444,7 +1514,7 @@ const HabitGoalTracker = () => {
   };
   
   // Toggle habit completion
-  const toggleHabitCompletion = (habitId) => {
+  const toggleHabitCompletion = async (habitId) => {
     // If a routine is active, prevent manual toggling of other habits
     if (activeRoutine && activeRoutine.habits[activeRoutineIndex] !== habitId) {
       return; // Don't allow manual toggle of other habits during routine
@@ -1454,19 +1524,23 @@ const HabitGoalTracker = () => {
     const currentCompletions = habitCompletions || {};
     const isCurrentlyComplete = currentCompletions[today]?.[habitId] || false;
     
-    // If completing the habit and it has a timer running, stop the timer and save time
-    if (!isCurrentlyComplete && activeTimers[habitId]) {
-      stopTimer(habitId, true);
-    }
-    
-    // If starting the habit and it doesn't have a duration cap, start an uncapped timer
-    if (isCurrentlyComplete && !activeTimers[habitId]) {
-      const habit = habits.find(h => h.id === habitId);
-      if (habit && !habit.duration) {
-        startUncappedTimer(habitId);
+    // Only handle timer logic if we're in an active routine
+    if (activeRoutine) {
+      // If completing the habit and it has a timer running, stop the timer and save time
+      if (!isCurrentlyComplete && activeTimers[habitId]) {
+        stopTimer(habitId, true);
+      }
+      
+      // If starting the habit and it doesn't have a duration cap, start an uncapped timer
+      if (isCurrentlyComplete && !activeTimers[habitId]) {
+        const habit = habits.find(h => h.id === habitId);
+        if (habit && !habit.duration) {
+          startUncappedTimer(habitId);
+        }
       }
     }
 
+    // Simple completion toggle - no timer functionality on homepage
     const newHabitCompletions = {
       ...currentCompletions,
       [today]: {
@@ -1475,7 +1549,7 @@ const HabitGoalTracker = () => {
       }
     };
     setHabitCompletions(newHabitCompletions);
-    dataService.updateHabitCompletions(newHabitCompletions);
+    await await dataService.updateHabitCompletions(newHabitCompletions);
 
     // If this is the current habit in an active routine, complete it
     if (activeRoutine && activeRoutine.habits[activeRoutineIndex] === habitId) {
@@ -1505,7 +1579,7 @@ const HabitGoalTracker = () => {
     // No duration set for uncapped timers
   };
 
-  const stopTimer = (habitId, completed = false) => {
+  const stopTimer = async (habitId, completed = false) => {
     const startTime = activeTimers[habitId];
     const duration = timerDurations[habitId];
     
@@ -1524,7 +1598,7 @@ const HabitGoalTracker = () => {
       };
       
       setHabitCompletionTimes(newCompletionTimes);
-      dataService.updateHabitCompletionTimes(newCompletionTimes);
+      await dataService.updateHabitCompletionTimes(newCompletionTimes);
     }
     
     // Clear the timer
@@ -1568,6 +1642,126 @@ const HabitGoalTracker = () => {
     // Reference timerUpdateTrigger to ensure re-renders when timer updates
     const _ = timerUpdateTrigger; // This ensures the function depends on timerUpdateTrigger
     return Math.ceil(remaining);
+  };
+
+  // Enhanced timer functions for music player UI
+  const getTimerDisplayTime = (habitId) => {
+    const startTime = activeTimers[habitId];
+    const pausedTime = pausedTimers[habitId];
+    const duration = timerDurations[habitId];
+    
+    let elapsed = 0;
+    if (startTime) {
+      elapsed = (Date.now() - startTime) / 1000; // in seconds
+    } else if (pausedTime) {
+      elapsed = pausedTime; // Use paused elapsed time
+    } else {
+      return null;
+    }
+    
+    const _ = timerUpdateTrigger; // Ensure re-renders
+    
+    if (!duration) {
+      // Non-estimated habit: show elapsed time in mm:ss format
+      const minutes = Math.floor(elapsed / 60);
+      const seconds = Math.floor(elapsed % 60);
+      return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+    } else {
+      // Estimated habit: show remaining time, or elapsed if over estimate
+      const remaining = Math.max((duration * 60) - elapsed, 0);
+      if (remaining > 0) {
+        const minutes = Math.floor(remaining / 60);
+        const seconds = Math.floor(remaining % 60);
+        return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+      } else {
+        const minutes = Math.floor(elapsed / 60);
+        const seconds = Math.floor(elapsed % 60);
+        return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+      }
+    }
+  };
+
+  const getTimerDisplayMode = (habitId) => {
+    const startTime = activeTimers[habitId];
+    const pausedTime = pausedTimers[habitId];
+    const duration = timerDurations[habitId];
+    
+    if (!startTime && !pausedTime) return 'ready';
+    
+    let elapsed = 0;
+    if (startTime) {
+      elapsed = (Date.now() - startTime) / 1000; // in seconds
+    } else if (pausedTime) {
+      elapsed = pausedTime;
+    }
+    
+    const _ = timerUpdateTrigger;
+    
+    if (!duration) {
+      return 'countup'; // Non-estimated: count up
+    } else {
+      const remaining = Math.max((duration * 60) - elapsed, 0);
+      return remaining > 0 ? 'countdown' : 'overestimate'; // Estimated: count down, then count up when over
+    }
+  };
+
+  const getTimerColor = (habitId) => {
+    const mode = getTimerDisplayMode(habitId);
+    switch (mode) {
+      case 'countdown': return '#10b981'; // green
+      case 'countup': return '#3b82f6'; // blue
+      case 'overestimate': return '#ef4444'; // red
+      default: return '#6b7280'; // gray
+    }
+  };
+
+  const getCircularProgress = (habitId) => {
+    const startTime = activeTimers[habitId];
+    const pausedTime = pausedTimers[habitId];
+    const duration = timerDurations[habitId];
+    
+    if (!startTime && !pausedTime) return 0;
+    
+    let elapsed = 0;
+    if (startTime) {
+      elapsed = (Date.now() - startTime) / 1000; // in seconds
+    } else if (pausedTime) {
+      elapsed = pausedTime;
+    }
+    
+    const _ = timerUpdateTrigger;
+    
+    if (!duration) {
+      // For non-estimated habits, show progress based on a reasonable default (30 min = 1800 seconds)
+      return Math.min((elapsed / 1800) * 100, 100);
+    } else {
+      // For estimated habits, show progress based on duration (convert minutes to seconds)
+      const durationSeconds = duration * 60;
+      return Math.min((elapsed / durationSeconds) * 100, 100);
+    }
+  };
+
+  // Handle tapping the circular timer for play/pause
+  const handleTimerTap = (habitId) => {
+    if (!activeRoutine) return;
+    
+    const currentHabit = habits.find(h => h.id === habitId);
+    if (!currentHabit) return;
+    
+    if (activeTimers[habitId]) {
+      // Timer is running, pause it
+      pauseRoutine();
+    } else if (pausedTimers[habitId] !== undefined) {
+      // Timer is paused, resume it
+      resumeRoutine();
+    } else {
+      // No timer, start it
+      if (currentHabit.duration) {
+        startTimer(habitId, currentHabit.duration);
+      } else {
+        startUncappedTimer(habitId);
+      }
+    }
   };
 
   // Calculate average completion time for a habit
@@ -1709,6 +1903,7 @@ const HabitGoalTracker = () => {
     setActiveRoutineIndex(firstIncompleteIndex);
     setRoutineStartTime(Date.now());
     setRoutinePaused(false);
+    setShowRoutineView(true);
 
     // Start timer for first incomplete habit
     const firstHabitId = routine.habits[firstIncompleteIndex];
@@ -1722,7 +1917,7 @@ const HabitGoalTracker = () => {
     }
   };
 
-  const completeRoutineHabit = (habitId) => {
+  const completeRoutineHabit = async (habitId) => {
     if (!activeRoutine) return;
 
     // Stop current timer and save time
@@ -1741,7 +1936,7 @@ const HabitGoalTracker = () => {
       };
       
       setHabitCompletionTimes(newCompletionTimes);
-      dataService.updateHabitCompletionTimes(newCompletionTimes);
+      await dataService.updateHabitCompletionTimes(newCompletionTimes);
     }
 
     // Mark habit complete
@@ -1755,7 +1950,7 @@ const HabitGoalTracker = () => {
       }
     };
     setHabitCompletions(newHabitCompletions);
-    dataService.updateHabitCompletions(newHabitCompletions);
+    await dataService.updateHabitCompletions(newHabitCompletions);
 
     // Clear the timer
     setActiveTimers(prev => {
@@ -1806,18 +2001,10 @@ const HabitGoalTracker = () => {
       });
     }
 
-    // Go to previous habit
+    // Go to previous habit and pause (don't auto-start)
     const prevIndex = activeRoutineIndex - 1;
     setActiveRoutineIndex(prevIndex);
-    const prevHabitId = activeRoutine.habits[prevIndex];
-    const prevHabit = habits.find(h => h.id === prevHabitId);
-    if (prevHabit) {
-      if (prevHabit.duration) {
-        startTimer(prevHabitId, prevHabit.duration);
-      } else {
-        startUncappedTimer(prevHabitId);
-      }
-    }
+    // Don't set routinePaused - just go to previous habit
   };
 
   const skipCurrentHabit = () => {
@@ -1838,10 +2025,11 @@ const HabitGoalTracker = () => {
       });
     }
 
-    // Move to next habit
+    // Move to next habit and auto-start
     const nextIndex = activeRoutineIndex + 1;
     if (nextIndex < activeRoutine.habits.length) {
       setActiveRoutineIndex(nextIndex);
+      // Auto-start the next habit
       const nextHabitId = activeRoutine.habits[nextIndex];
       const nextHabit = habits.find(h => h.id === nextHabitId);
       if (nextHabit) {
@@ -1860,39 +2048,64 @@ const HabitGoalTracker = () => {
   const pauseRoutine = () => {
     if (!activeRoutine) return;
     
-    // Pause current timer
+    // Pause current timer and save elapsed time
     const currentHabitId = activeRoutine.habits[activeRoutineIndex];
     if (activeTimers[currentHabitId]) {
+      const startTime = activeTimers[currentHabitId];
+      const elapsed = (Date.now() - startTime) / 1000; // in seconds
+      
+      // Save elapsed time to paused timers
+      setPausedTimers(prev => ({
+        ...prev,
+        [currentHabitId]: elapsed
+      }));
+      
+      // Remove from active timers
       setActiveTimers(prev => {
         const newTimers = { ...prev };
         delete newTimers[currentHabitId];
         return newTimers;
       });
-      setTimerDurations(prev => {
-        const newDurations = { ...prev };
-        delete newDurations[currentHabitId];
-        return newDurations;
-      });
     }
     
-    setRoutinePaused(true);
+    // Don't set routinePaused to true - only pause the current habit
   };
 
   const resumeRoutine = () => {
     if (!activeRoutine) return;
     
-    // Resume current habit timer
+    // Resume current habit timer from paused state
     const currentHabitId = activeRoutine.habits[activeRoutineIndex];
-    const currentHabit = habits.find(h => h.id === currentHabitId);
-    if (currentHabit) {
-      if (currentHabit.duration) {
-        startTimer(currentHabitId, currentHabit.duration);
-      } else {
-        startUncappedTimer(currentHabitId);
+    const pausedTime = pausedTimers[currentHabitId];
+    
+    if (pausedTime !== undefined) {
+      // Resume from paused time by setting a new start time that accounts for elapsed time
+      const newStartTime = Date.now() - (pausedTime * 1000);
+      
+      setActiveTimers(prev => ({
+        ...prev,
+        [currentHabitId]: newStartTime
+      }));
+      
+      // Remove from paused timers
+      setPausedTimers(prev => {
+        const newPaused = { ...prev };
+        delete newPaused[currentHabitId];
+        return newPaused;
+      });
+    } else {
+      // Start fresh timer if no paused time
+      const currentHabit = habits.find(h => h.id === currentHabitId);
+      if (currentHabit) {
+        if (currentHabit.duration) {
+          startTimer(currentHabitId, currentHabit.duration);
+        } else {
+          startUncappedTimer(currentHabitId);
+        }
       }
     }
     
-    setRoutinePaused(false);
+    // Don't set routinePaused - only resume the current habit
   };
 
   const stopRoutine = () => {
@@ -1916,9 +2129,10 @@ const HabitGoalTracker = () => {
     setActiveRoutineIndex(0);
     setRoutineStartTime(null);
     setRoutinePaused(false);
+    setShowRoutineView(false);
   };
 
-  const finishRoutine = () => {
+  const finishRoutine = async () => {
     if (!activeRoutine || !routineStartTime) return;
 
     // Calculate total routine time
@@ -1951,18 +2165,19 @@ const HabitGoalTracker = () => {
     };
     
     setRoutineCompletions(newRoutineCompletions);
-    dataService.updateRoutineCompletions(newRoutineCompletions);
+    await dataService.updateRoutineCompletions(newRoutineCompletions);
 
     // Clear routine state
     setActiveRoutine(null);
     setActiveRoutineIndex(0);
     setRoutineStartTime(null);
     setRoutinePaused(false);
+    setShowRoutineView(false);
   };
   
   
   // Add goal
-  const addGoal = (goalName) => {
+  const addGoal = async (goalName) => {
     const newGoal = {
       id: Date.now(),
       name: goalName,
@@ -1972,22 +2187,22 @@ const HabitGoalTracker = () => {
     };
     const newGoals = [...goals, newGoal];
     setGoals(newGoals);
-    dataService.updateGoals(newGoals);
+    await dataService.updateGoals(newGoals);
   };
   
   // Add task to goal
-  const addTaskToGoal = (goalId, taskName) => {
+  const addTaskToGoal = async (goalId, taskName) => {
     const newGoals = goals.map(g => 
       g.id === goalId
         ? { ...g, tasks: [...g.tasks, { id: Date.now(), name: taskName, completed: false }] }
         : g
     );
     setGoals(newGoals);
-    dataService.updateGoals(newGoals);
+    await dataService.updateGoals(newGoals);
   };
   
   // Toggle task completion
-  const toggleTaskCompletion = (goalId, taskId) => {
+  const toggleTaskCompletion = async (goalId, taskId) => {
     const newGoals = goals.map(g => 
       g.id === goalId
         ? {
@@ -1999,11 +2214,11 @@ const HabitGoalTracker = () => {
         : g
     );
     setGoals(newGoals);
-    dataService.updateGoals(newGoals);
+    await dataService.updateGoals(newGoals);
   };
   
   // Add task to daily todo
-  const addTaskToTodo = (task, goalId) => {
+  const addTaskToTodo = async (task, goalId) => {
     const newTodo = {
       id: Date.now(),
       name: task.name,
@@ -2013,11 +2228,11 @@ const HabitGoalTracker = () => {
     };
     const newTodos = [...todos, newTodo];
     setTodos(newTodos);
-    dataService.updateTodos(newTodos);
+    await dataService.updateTodos(newTodos);
   };
   
   // Add custom todo
-  const addCustomTodo = (todoName, goalId = null) => {
+  const addCustomTodo = async (todoName, goalId = null) => {
     const newTodo = {
       id: Date.now(),
       name: todoName,
@@ -2027,23 +2242,23 @@ const HabitGoalTracker = () => {
     };
     const newTodos = [...todos, newTodo];
     setTodos(newTodos);
-    dataService.updateTodos(newTodos);
+    await dataService.updateTodos(newTodos);
   };
   
   // Toggle todo completion
-  const toggleTodoCompletion = (todoId) => {
+  const toggleTodoCompletion = async (todoId) => {
     const newTodos = todos.map(t => 
       t.id === todoId ? { ...t, completed: !t.completed } : t
     );
     setTodos(newTodos);
-    dataService.updateTodos(newTodos);
+    await dataService.updateTodos(newTodos);
   };
   
   // Delete todo
-  const deleteTodo = (todoId) => {
+  const deleteTodo = async (todoId) => {
     const newTodos = todos.filter(t => t.id !== todoId);
     setTodos(newTodos);
-    dataService.updateTodos(newTodos);
+    await dataService.updateTodos(newTodos);
   };
   
   // Export data to JSON file
@@ -2186,7 +2401,8 @@ const HabitGoalTracker = () => {
                                 {streak}D
                               </span>
                             )}
-                            {(habit.duration || habit.expectedCompletionTime || activeTimers[habit.id]) && (
+                            {/* Only show timer controls when in active routine */}
+                            {activeRoutine && (habit.duration || habit.expectedCompletionTime || activeTimers[habit.id]) && (
                               <div className="flex items-center gap-1">
                                 {activeTimers[habit.id] ? (
                                   <>
@@ -2252,8 +2468,8 @@ const HabitGoalTracker = () => {
                               </div>
                             )}
                             
-                            {/* Expected Time Progress Bar */}
-                            {activeTimers[habit.id] && habit.expectedCompletionTime && (
+                            {/* Expected Time Progress Bar - only in routine */}
+                            {activeRoutine && activeTimers[habit.id] && habit.expectedCompletionTime && (
                               <ExpectedTimeProgressBar habitId={habit.id} />
                             )}
                           </div>
@@ -2455,7 +2671,8 @@ const HabitGoalTracker = () => {
                           {streak}D
                         </span>
                       )}
-                      {(habit.duration || activeTimers[habit.id]) && (
+                      {/* Only show timer controls when in active routine */}
+                      {activeRoutine && (habit.duration || activeTimers[habit.id]) && (
                         <div className="flex items-center gap-1">
                           {activeTimers[habit.id] ? (
                             <>
@@ -3005,36 +3222,51 @@ const HabitGoalTracker = () => {
   };
   
   // Navigation
-  const Navigation = () => (
-    <div className="fixed bottom-0 left-0 right-0 bg-white shadow-lg border-t border-stone-200">
-      <div className="max-w-md mx-auto flex justify-around py-2">
-        <button
-          onClick={() => setCurrentView('dashboard')}
-          className={`flex flex-col items-center p-2 ${currentView === 'dashboard' ? 'text-[#333333]' : 'text-[#333333] opacity-40'}`}
-        >
-          <Home size={24} strokeWidth={2.5} />
-          <span className="text-xs mt-1 font-mono uppercase tracking-wider">Home</span>
-        </button>
-        <button
-          onClick={() => setCurrentView('routines')}
-          className={`flex flex-col items-center p-2 ${currentView === 'routines' ? 'text-[#333333]' : 'text-[#333333] opacity-40'}`}
-        >
-          <Calendar size={24} strokeWidth={2.5} />
-          <span className="text-xs mt-1 font-mono uppercase tracking-wider">Routines</span>
-        </button>
-        <button
-          onClick={() => setCurrentView('goals')}
-          className={`flex flex-col items-center p-2 ${currentView === 'goals' ? 'text-[#333333]' : 'text-[#333333] opacity-40'}`}
-        >
-          <Target size={24} strokeWidth={2.5} />
-          <span className="text-xs mt-1 font-mono uppercase tracking-wider">Goals</span>
-        </button>
+  const Navigation = () => {
+    if (showRoutineView) return null; // Hide navigation when in routine view
+    
+    return (
+      <div className="fixed bottom-0 left-0 right-0 bg-white shadow-lg border-t border-stone-200">
+        <div className="max-w-md mx-auto flex justify-around py-2">
+          <button
+            onClick={() => setCurrentView('dashboard')}
+            className={`flex flex-col items-center p-2 ${currentView === 'dashboard' ? 'text-[#333333]' : 'text-[#333333] opacity-40'}`}
+          >
+            <Home size={24} strokeWidth={2.5} />
+            <span className="text-xs mt-1 font-mono uppercase tracking-wider">Home</span>
+          </button>
+          <button
+            onClick={() => setCurrentView('routines')}
+            className={`flex flex-col items-center p-2 ${currentView === 'routines' ? 'text-[#333333]' : 'text-[#333333] opacity-40'}`}
+          >
+            <Calendar size={24} strokeWidth={2.5} />
+            <span className="text-xs mt-1 font-mono uppercase tracking-wider">Routines</span>
+          </button>
+          <button
+            onClick={() => setCurrentView('goals')}
+            className={`flex flex-col items-center p-2 ${currentView === 'goals' ? 'text-[#333333]' : 'text-[#333333] opacity-40'}`}
+          >
+            <Target size={24} strokeWidth={2.5} />
+            <span className="text-xs mt-1 font-mono uppercase tracking-wider">Goals</span>
+          </button>
+        </div>
       </div>
-    </div>
-  );
+    );
+  };
   
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-stone-50 to-stone-100 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#333333] mx-auto mb-4"></div>
+          <p className="text-[#333333] font-medium">Loading your habits...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="min-h-screen bg-stone-50 pb-20">
+    <div className={`min-h-screen bg-stone-50 ${showRoutineView ? 'pb-0' : 'pb-20'}`}>
       <div className="max-w-md mx-auto">
         {/* Header */}
         <div className="bg-white border-b-2 border-stone-200 p-4 shadow-md">
@@ -3107,11 +3339,15 @@ const HabitGoalTracker = () => {
         </div>
         
         {/* Main Content */}
-        <div className="p-4">
-          {currentView === 'dashboard' && <DashboardView />}
-          {currentView === 'routines' && <RoutinesView />}
-          {currentView === 'goals' && <GoalsView />}
-        </div>
+        {showRoutineView ? (
+          <RoutineView />
+        ) : (
+          <div className="p-4">
+            {currentView === 'dashboard' && <DashboardView />}
+            {currentView === 'routines' && <RoutinesView />}
+            {currentView === 'goals' && <GoalsView />}
+          </div>
+        )}
         
         {/* Navigation */}
         <Navigation />
@@ -3161,8 +3397,6 @@ const HabitGoalTracker = () => {
           />
         )}
 
-        {/* Routine Overlay */}
-        <RoutineOverlay />
       </div>
     </div>
   );
