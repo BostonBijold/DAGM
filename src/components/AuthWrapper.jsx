@@ -99,8 +99,8 @@ const AuthWrapper = ({ children }) => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-stone-50 to-stone-100">
-      {/* Header with user info and sign out */}
-      <div className="bg-white shadow-sm border-b border-stone-200">
+      {/* Header with user info and sign out - Fixed at top */}
+      <div className="fixed top-0 left-0 right-0 bg-white shadow-sm border-b border-stone-200 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center gap-3">
@@ -122,8 +122,8 @@ const AuthWrapper = ({ children }) => {
         </div>
       </div>
       
-      {/* Main app content */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      {/* Main app content - Add top padding to account for fixed header */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-20 pb-8">
         {children}
       </div>
     </div>

@@ -136,13 +136,13 @@ const HabitGoalTracker = () => {
   // Check if we need to reset habits for a new day
   const checkAndResetDailyHabits = async () => {
     const today = getTodayString();
-    const lastResetDate = localStorage.getItem('habitTrackerLastResetDate');
+    const lastResetDate = await dataService.getLastResetDate();
     
     // If this is a new day, reset all habit completions
     if (lastResetDate !== today) {
       // Clear today's habit completions and completion times
-      const currentCompletions = dataService.getHabitCompletions();
-      const currentCompletionTimes = dataService.getHabitCompletionTimes();
+      const currentCompletions = await dataService.getHabitCompletions();
+      const currentCompletionTimes = await dataService.getHabitCompletionTimes();
       
       // Remove today's data if it exists
       if (currentCompletions[today]) {
@@ -161,7 +161,7 @@ const HabitGoalTracker = () => {
       setHabitCompletionTimes(currentCompletionTimes);
       
       // Update last reset date
-      localStorage.setItem('habitTrackerLastResetDate', today);
+      await dataService.updateLastResetDate(today);
       
       // Also reset daily todos (remove todos that were added today)
       const currentTodos = await dataService.getTodos();
@@ -3226,7 +3226,7 @@ const HabitGoalTracker = () => {
     if (showRoutineView) return null; // Hide navigation when in routine view
     
     return (
-      <div className="fixed bottom-0 left-0 right-0 bg-white shadow-lg border-t border-stone-200">
+      <div className="fixed bottom-0 left-0 right-0 bg-white shadow-lg border-t border-stone-200 z-40">
         <div className="max-w-md mx-auto flex justify-around py-2">
           <button
             onClick={() => setCurrentView('dashboard')}
@@ -3266,88 +3266,92 @@ const HabitGoalTracker = () => {
   }
 
   return (
-    <div className={`min-h-screen bg-stone-50 ${showRoutineView ? 'pb-0' : 'pb-20'}`}>
+    <div className="min-h-screen bg-stone-50">
       <div className="max-w-md mx-auto">
-        {/* Header */}
-        <div className="bg-white border-b-2 border-stone-200 p-4 shadow-md">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-2xl font-bold tracking-tight text-[#333333]">GROWTH TRACKER</h1>
-              <p className="text-sm text-[#333333] opacity-70 font-mono">{currentDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }).toUpperCase()}</p>
-              {currentUser && (
-                <p className="text-xs text-[#333333] opacity-50 font-mono">User: {currentUser.name}</p>
-              )}
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => {
-                  debugStorage();
-                  addTestData();
-                  window.location.reload();
-                }}
-                className="p-2 hover:bg-stone-100 rounded-lg transition-colors bg-yellow-100"
-                title="Debug Storage"
-              >
-                🐛
-              </button>
-              <button
-                onClick={() => setShowUserManager(true)}
-                className="p-2 hover:bg-stone-100 rounded-lg transition-colors"
-                title="Manage Users"
-              >
-                <User size={20} strokeWidth={2.5} className="text-[#333333]" />
-              </button>
-              <div className="relative data-menu-container">
-                <button
-                  onClick={() => setShowDataMenu(!showDataMenu)}
-                  className="p-2 hover:bg-stone-100 rounded-lg transition-colors"
-                >
-                  <div className="flex flex-col gap-1">
-                    <div className="w-5 h-0.5 bg-[#333333]"></div>
-                    <div className="w-5 h-0.5 bg-[#333333]"></div>
-                    <div className="w-5 h-0.5 bg-[#333333]"></div>
-                  </div>
-                </button>
-                
-                {showDataMenu && (
-                  <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-xl border-2 border-stone-200 z-50">
-                    <button
-                      onClick={() => {
-                        exportData();
-                        setShowDataMenu(false);
-                      }}
-                      className="w-full px-4 py-3 text-left hover:bg-stone-100 flex items-center gap-3 border-b border-stone-200"
-                    >
-                      <Download size={18} strokeWidth={2.5} className="text-[#333333]" />
-                      <span className="font-bold text-sm uppercase tracking-wider text-[#333333]">Export Data</span>
-                    </button>
-                    <label className="w-full px-4 py-3 hover:bg-stone-100 flex items-center gap-3 cursor-pointer">
-                      <Upload size={18} strokeWidth={2.5} className="text-[#333333]" />
-                      <span className="font-bold text-sm uppercase tracking-wider text-[#333333]">Import Data</span>
-                      <input
-                        type="file"
-                        accept=".json"
-                        onChange={importData}
-                        className="hidden"
-                      />
-                    </label>
-                  </div>
+        {/* Header - Fixed below AuthWrapper header */}
+        <div className="fixed top-16 left-0 right-0 bg-white border-b-2 border-stone-200 p-4 shadow-md z-30">
+          <div className="max-w-md mx-auto">
+            <div className="flex items-center justify-between">
+              <div>
+                <h1 className="text-2xl font-bold tracking-tight text-[#333333]">GROWTH TRACKER</h1>
+                <p className="text-sm text-[#333333] opacity-70 font-mono">{currentDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }).toUpperCase()}</p>
+                {currentUser && (
+                  <p className="text-xs text-[#333333] opacity-50 font-mono">User: {currentUser.name}</p>
                 )}
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    debugStorage();
+                    addTestData();
+                    window.location.reload();
+                  }}
+                  className="p-2 hover:bg-stone-100 rounded-lg transition-colors bg-yellow-100"
+                  title="Debug Storage"
+                >
+                  🐛
+                </button>
+                <button
+                  onClick={() => setShowUserManager(true)}
+                  className="p-2 hover:bg-stone-100 rounded-lg transition-colors"
+                  title="Manage Users"
+                >
+                  <User size={20} strokeWidth={2.5} className="text-[#333333]" />
+                </button>
+                <div className="relative data-menu-container">
+                  <button
+                    onClick={() => setShowDataMenu(!showDataMenu)}
+                    className="p-2 hover:bg-stone-100 rounded-lg transition-colors"
+                  >
+                    <div className="flex flex-col gap-1">
+                      <div className="w-5 h-0.5 bg-[#333333]"></div>
+                      <div className="w-5 h-0.5 bg-[#333333]"></div>
+                      <div className="w-5 h-0.5 bg-[#333333]"></div>
+                    </div>
+                  </button>
+                  
+                  {showDataMenu && (
+                    <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-xl border-2 border-stone-200 z-50">
+                      <button
+                        onClick={() => {
+                          exportData();
+                          setShowDataMenu(false);
+                        }}
+                        className="w-full px-4 py-3 text-left hover:bg-stone-100 flex items-center gap-3 border-b border-stone-200"
+                      >
+                        <Download size={18} strokeWidth={2.5} className="text-[#333333]" />
+                        <span className="font-bold text-sm uppercase tracking-wider text-[#333333]">Export Data</span>
+                      </button>
+                      <label className="w-full px-4 py-3 hover:bg-stone-100 flex items-center gap-3 cursor-pointer">
+                        <Upload size={18} strokeWidth={2.5} className="text-[#333333]" />
+                        <span className="font-bold text-sm uppercase tracking-wider text-[#333333]">Import Data</span>
+                        <input
+                          type="file"
+                          accept=".json"
+                          onChange={importData}
+                          className="hidden"
+                        />
+                      </label>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           </div>
         </div>
         
-        {/* Main Content */}
-        {showRoutineView ? (
-          <RoutineView />
-        ) : (
-          <div className="p-4">
-            {currentView === 'dashboard' && <DashboardView />}
-            {currentView === 'routines' && <RoutinesView />}
-            {currentView === 'goals' && <GoalsView />}
-          </div>
-        )}
+        {/* Main Content - Add top padding to account for both fixed headers */}
+        <div className={`pt-40 ${showRoutineView ? 'pb-0' : 'pb-20'}`}>
+          {showRoutineView ? (
+            <RoutineView />
+          ) : (
+            <div className="p-4">
+              {currentView === 'dashboard' && <DashboardView />}
+              {currentView === 'routines' && <RoutinesView />}
+              {currentView === 'goals' && <GoalsView />}
+            </div>
+          )}
+        </div>
         
         {/* Navigation */}
         <Navigation />
