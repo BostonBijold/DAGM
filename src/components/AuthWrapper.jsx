@@ -5,6 +5,7 @@ import authService from '../services/authService';
 const AuthWrapper = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [showUserDropdown, setShowUserDropdown] = useState(false);
 
   useEffect(() => {
     // Initialize auth service
@@ -40,6 +41,21 @@ const AuthWrapper = ({ children }) => {
       alert('Sign out failed. Please try again.');
     }
   };
+
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (showUserDropdown && !event.target.closest('.relative')) {
+        setShowUserDropdown(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showUserDropdown]);
 
   if (loading) {
     return (
@@ -99,31 +115,64 @@ const AuthWrapper = ({ children }) => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-stone-50 to-stone-100">
-      {/* Header with user info and sign out - Fixed at top */}
-      <div className="fixed top-0 left-0 right-0 bg-white shadow-sm border-b border-stone-200 z-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      {/* Unified Header - Fixed at top */}
+      <div className="fixed top-0 left-0 right-0 bg-black shadow-lg border-b border-gray-800 z-50">
+        <div className="max-w-md mx-auto px-4">
           <div className="flex justify-between items-center h-16">
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 bg-[#333333] rounded-full flex items-center justify-center">
-                <User size={16} strokeWidth={2.5} className="text-white" />
-              </div>
-              <div>
-                <p className="font-bold text-[#333333]">{user.name}</p>
-                <p className="text-xs text-[#333333] opacity-70">{user.email}</p>
-              </div>
+            {/* Left: AGM Logo */}
+            <div className="flex items-center">
+              <img 
+                src="/agm_logo_white.png" 
+                alt="AGM Logo" 
+                className="h-10 w-10 sm:h-10 sm:w-10 object-contain"
+              />
             </div>
-            <button
-              onClick={handleSignOut}
-              className="text-sm bg-stone-100 text-[#333333] px-4 py-2 rounded-lg hover:bg-stone-200 font-medium transition-colors"
-            >
-              Sign Out
-            </button>
+            
+            {/* Center: App Title */}
+            <div className="flex-1 flex justify-center">
+              <h1 className="text-sm sm:text-lg font-bold text-white tracking-tight">
+                GROWTH TRACKER
+              </h1>
+            </div>
+            
+            {/* Right: User Avatar with Dropdown */}
+            <div className="relative">
+              <button
+                onClick={() => setShowUserDropdown(!showUserDropdown)}
+                className="w-9 h-9 bg-white rounded-full flex items-center justify-center hover:bg-gray-200 transition-colors"
+              >
+                <User size={18} strokeWidth={2.5} className="text-black" />
+              </button>
+              
+              {showUserDropdown && (
+                <div className="absolute right-0 mt-2 w-64 bg-white rounded-lg shadow-xl border-2 border-stone-200 z-50">
+                  <div className="p-4 border-b border-stone-200">
+                    <p className="font-bold text-[#333333]">{user.name}</p>
+                    <p className="text-sm text-[#333333] opacity-70">{user.email}</p>
+                  </div>
+                  
+                  
+                  <div className="border-t border-stone-200 py-2">
+                    <button
+                      onClick={() => {
+                        setShowUserDropdown(false);
+                        handleSignOut();
+                      }}
+                      className="w-full px-4 py-3 text-left hover:bg-red-50 flex items-center gap-3 text-red-600"
+                    >
+                      <LogIn size={18} strokeWidth={2.5} />
+                      <span className="font-medium text-sm">Sign Out</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
       
       {/* Main app content - Add top padding to account for fixed header */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-20 pb-8">
+      <div className="max-w-md mx-auto px-4 pt-16 pb-8">
         {children}
       </div>
     </div>

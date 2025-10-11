@@ -2312,6 +2312,18 @@ const HabitGoalTracker = () => {
     
     return (
       <div className="space-y-4">
+        {/* Date Display */}
+        <div className="bg-white rounded-xl shadow-md p-4">
+          <h2 className="text-lg font-bold text-[#333333] mb-2">Today</h2>
+          <p className="text-sm text-[#333333] opacity-70 font-mono">
+            {currentDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }).toUpperCase()}
+          </p>
+          {currentUser && (
+            <p className="text-xs text-[#333333] opacity-50 font-mono mt-1">
+              User: {currentUser.name}
+            </p>
+          )}
+        </div>
         {/* Daily Quote */}
         <div className="bg-white rounded-xl shadow-md p-6">
           <p className="text-base leading-relaxed text-[#333333] font-serif italic">"{getDailyQuote()}"</p>
@@ -3226,25 +3238,37 @@ const HabitGoalTracker = () => {
     if (showRoutineView) return null; // Hide navigation when in routine view
     
     return (
-      <div className="fixed bottom-0 left-0 right-0 bg-white shadow-lg border-t border-stone-200 z-40">
-        <div className="max-w-md mx-auto flex justify-around py-2">
+      <div className="fixed bottom-0 left-0 right-0 backdrop-blur-sm bg-white/95 shadow-lg border-t border-stone-200 z-50 pb-safe">
+        <div className="max-w-md mx-auto flex justify-around py-3">
           <button
             onClick={() => setCurrentView('dashboard')}
-            className={`flex flex-col items-center p-2 ${currentView === 'dashboard' ? 'text-[#333333]' : 'text-[#333333] opacity-40'}`}
+            className={`flex flex-col items-center p-3 min-h-[68px] justify-center transition-all duration-200 ${
+              currentView === 'dashboard' 
+                ? 'text-[#333333] scale-105' 
+                : 'text-[#333333] opacity-40 hover:opacity-70'
+            }`}
           >
             <Home size={24} strokeWidth={2.5} />
             <span className="text-xs mt-1 font-mono uppercase tracking-wider">Home</span>
           </button>
           <button
             onClick={() => setCurrentView('routines')}
-            className={`flex flex-col items-center p-2 ${currentView === 'routines' ? 'text-[#333333]' : 'text-[#333333] opacity-40'}`}
+            className={`flex flex-col items-center p-3 min-h-[68px] justify-center transition-all duration-200 ${
+              currentView === 'routines' 
+                ? 'text-[#333333] scale-105' 
+                : 'text-[#333333] opacity-40 hover:opacity-70'
+            }`}
           >
             <Calendar size={24} strokeWidth={2.5} />
             <span className="text-xs mt-1 font-mono uppercase tracking-wider">Routines</span>
           </button>
           <button
             onClick={() => setCurrentView('goals')}
-            className={`flex flex-col items-center p-2 ${currentView === 'goals' ? 'text-[#333333]' : 'text-[#333333] opacity-40'}`}
+            className={`flex flex-col items-center p-3 min-h-[68px] justify-center transition-all duration-200 ${
+              currentView === 'goals' 
+                ? 'text-[#333333] scale-105' 
+                : 'text-[#333333] opacity-40 hover:opacity-70'
+            }`}
           >
             <Target size={24} strokeWidth={2.5} />
             <span className="text-xs mt-1 font-mono uppercase tracking-wider">Goals</span>
@@ -3268,80 +3292,9 @@ const HabitGoalTracker = () => {
   return (
     <div className="min-h-screen bg-stone-50">
       <div className="max-w-md mx-auto">
-        {/* Header - Fixed below AuthWrapper header */}
-        <div className="fixed top-16 left-0 right-0 bg-white border-b-2 border-stone-200 p-4 shadow-md z-30">
-          <div className="max-w-md mx-auto">
-            <div className="flex items-center justify-between">
-              <div>
-                <h1 className="text-2xl font-bold tracking-tight text-[#333333]">GROWTH TRACKER</h1>
-                <p className="text-sm text-[#333333] opacity-70 font-mono">{currentDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }).toUpperCase()}</p>
-                {currentUser && (
-                  <p className="text-xs text-[#333333] opacity-50 font-mono">User: {currentUser.name}</p>
-                )}
-              </div>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => {
-                    debugStorage();
-                    addTestData();
-                    window.location.reload();
-                  }}
-                  className="p-2 hover:bg-stone-100 rounded-lg transition-colors bg-yellow-100"
-                  title="Debug Storage"
-                >
-                  🐛
-                </button>
-                <button
-                  onClick={() => setShowUserManager(true)}
-                  className="p-2 hover:bg-stone-100 rounded-lg transition-colors"
-                  title="Manage Users"
-                >
-                  <User size={20} strokeWidth={2.5} className="text-[#333333]" />
-                </button>
-                <div className="relative data-menu-container">
-                  <button
-                    onClick={() => setShowDataMenu(!showDataMenu)}
-                    className="p-2 hover:bg-stone-100 rounded-lg transition-colors"
-                  >
-                    <div className="flex flex-col gap-1">
-                      <div className="w-5 h-0.5 bg-[#333333]"></div>
-                      <div className="w-5 h-0.5 bg-[#333333]"></div>
-                      <div className="w-5 h-0.5 bg-[#333333]"></div>
-                    </div>
-                  </button>
-                  
-                  {showDataMenu && (
-                    <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-xl border-2 border-stone-200 z-50">
-                      <button
-                        onClick={() => {
-                          exportData();
-                          setShowDataMenu(false);
-                        }}
-                        className="w-full px-4 py-3 text-left hover:bg-stone-100 flex items-center gap-3 border-b border-stone-200"
-                      >
-                        <Download size={18} strokeWidth={2.5} className="text-[#333333]" />
-                        <span className="font-bold text-sm uppercase tracking-wider text-[#333333]">Export Data</span>
-                      </button>
-                      <label className="w-full px-4 py-3 hover:bg-stone-100 flex items-center gap-3 cursor-pointer">
-                        <Upload size={18} strokeWidth={2.5} className="text-[#333333]" />
-                        <span className="font-bold text-sm uppercase tracking-wider text-[#333333]">Import Data</span>
-                        <input
-                          type="file"
-                          accept=".json"
-                          onChange={importData}
-                          className="hidden"
-                        />
-                      </label>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
         
-        {/* Main Content - Add top padding to account for both fixed headers */}
-        <div className={`pt-40 ${showRoutineView ? 'pb-0' : 'pb-20'}`}>
+        {/* Main Content - Add top padding to account for fixed header */}
+        <div className={`pt-4 ${showRoutineView ? 'pb-0' : 'pb-20'}`}>
           {showRoutineView ? (
             <RoutineView />
           ) : (
