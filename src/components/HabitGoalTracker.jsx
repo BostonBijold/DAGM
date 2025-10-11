@@ -3087,12 +3087,29 @@ const HabitGoalTracker = () => {
   // History View
   const HistoryView = ({ onClose }) => {
     const [selectedDate, setSelectedDate] = useState(new Date());
-    const [viewMode, setViewMode] = useState('day'); // 'day' or 'week'
+    const [viewMode, setViewMode] = useState('day'); // 'day', 'week', 'month', 'year'
     
-    // Navigate dates
-    const changeDate = (days) => {
+    // Navigate dates based on view mode
+    const changeDate = (increment) => {
       const newDate = new Date(selectedDate);
-      newDate.setDate(newDate.getDate() + days);
+      
+      switch (viewMode) {
+        case 'day':
+          newDate.setDate(newDate.getDate() + increment);
+          break;
+        case 'week':
+          newDate.setDate(newDate.getDate() + (increment * 7));
+          break;
+        case 'month':
+          newDate.setMonth(newDate.getMonth() + increment);
+          break;
+        case 'year':
+          newDate.setFullYear(newDate.getFullYear() + increment);
+          break;
+        default:
+          newDate.setDate(newDate.getDate() + increment);
+      }
+      
       setSelectedDate(newDate);
     };
     
@@ -3126,6 +3143,114 @@ const HabitGoalTracker = () => {
       if (habitsForDate.length === 0) return 0;
       const completed = habitsForDate.filter(h => h.completed).length;
       return Math.round((completed / habitsForDate.length) * 100);
+    };
+
+    // Helper functions for month and year views
+    const getWeeksInMonth = (date) => {
+      const year = date.getFullYear();
+      const month = date.getMonth();
+      const firstDay = new Date(year, month, 1);
+      const lastDay = new Date(year, month + 1, 0);
+      
+      const weeks = [];
+      let currentWeekStart = new Date(firstDay);
+      
+      // Adjust to start of week (Sunday)
+      currentWeekStart.setDate(currentWeekStart.getDate() - currentWeekStart.getDay());
+      
+      while (currentWeekStart <= lastDay) {
+        const weekEnd = new Date(currentWeekStart);
+        weekEnd.setDate(weekEnd.getDate() + 6);
+        
+        weeks.push({
+          start: new Date(currentWeekStart),
+          end: new Date(weekEnd)
+        });
+        
+        currentWeekStart.setDate(currentWeekStart.getDate() + 7);
+      }
+      
+      return weeks;
+    };
+
+    const getMonthsInYear = (year) => {
+      const months = [];
+      for (let i = 0; i < 12; i++) {
+        months.push(new Date(year, i, 1));
+      }
+      return months;
+    };
+
+    const getWeeklyStats = (startDate, endDate) => {
+      const days = [];
+      const current = new Date(startDate);
+      
+      while (current <= endDate) {
+        days.push(new Date(current));
+        current.setDate(current.getDate() + 1);
+      }
+      
+      const completionRates = days.map(date => getCompletionRate(date));
+      const avgRate = completionRates.length > 0 
+        ? Math.round(completionRates.reduce((sum, rate) => sum + rate, 0) / completionRates.length)
+        : 0;
+      
+      const perfectDays = completionRates.filter(rate => rate === 100).length;
+      const totalHabits = days.reduce((sum, date) => sum + getHabitsForDate(date).length, 0);
+      const completedHabits = days.reduce((sum, date) => {
+        const habits = getHabitsForDate(date);
+        return sum + habits.filter(h => h.completed).length;
+      }, 0);
+      
+      return {
+        avgRate,
+        perfectDays,
+        totalHabits,
+        completedHabits,
+        days: days.length
+      };
+    };
+
+    const getMonthlyStats = (month, year) => {
+      const weeks = getWeeksInMonth(new Date(year, month, 1));
+      const weeklyStats = weeks.map(week => getWeeklyStats(week.start, week.end));
+      
+      const totalAvgRate = weeklyStats.length > 0
+        ? Math.round(weeklyStats.reduce((sum, stats) => sum + stats.avgRate, 0) / weeklyStats.length)
+        : 0;
+      
+      const totalPerfectDays = weeklyStats.reduce((sum, stats) => sum + stats.perfectDays, 0);
+      const totalHabits = weeklyStats.reduce((sum, stats) => sum + stats.totalHabits, 0);
+      const totalCompletedHabits = weeklyStats.reduce((sum, stats) => sum + stats.completedHabits, 0);
+      
+      return {
+        avgRate: totalAvgRate,
+        perfectDays: totalPerfectDays,
+        totalHabits,
+        completedHabits: totalCompletedHabits,
+        weeks: weeklyStats
+      };
+    };
+
+    const getYearlyStats = (year) => {
+      const months = getMonthsInYear(year);
+      const monthlyStats = months.map(month => getMonthlyStats(month.getMonth(), year));
+      
+      const totalAvgRate = monthlyStats.length > 0
+        ? Math.round(monthlyStats.reduce((sum, stats) => sum + stats.avgRate, 0) / monthlyStats.length)
+        : 0;
+      
+      const totalPerfectDays = monthlyStats.reduce((sum, stats) => sum + stats.perfectDays, 0);
+      const totalHabits = monthlyStats.reduce((sum, stats) => sum + stats.totalHabits, 0);
+      const totalCompletedHabits = monthlyStats.reduce((sum, stats) => sum + stats.completedHabits, 0);
+      
+      return {
+        avgRate: totalAvgRate,
+        perfectDays: totalPerfectDays,
+        totalHabits,
+        completedHabits: totalCompletedHabits,
+        months: monthlyStats
+      };
     };
     
     // Get last 7 days for week view
@@ -3193,28 +3318,22 @@ const HabitGoalTracker = () => {
         </div>
         
         {/* View Mode Toggle */}
-        <div className="bg-white rounded-xl shadow-md p-3 flex gap-2">
-          <button
-            onClick={() => setViewMode('day')}
-            className={`flex-1 py-2 rounded-lg font-bold uppercase text-sm tracking-wider transition-all ${
-              viewMode === 'day' 
-                ? 'bg-black text-white' 
-                : 'bg-stone-100 text-[#333333]'
-            }`}
-          >
-            Day View
-          </button>
-          <button
-            onClick={() => setViewMode('week')}
-            className={`flex-1 py-2 rounded-lg font-bold uppercase text-sm tracking-wider transition-all ${
-              viewMode === 'week' 
-                ? 'bg-black text-white' 
-                : 'bg-stone-100 text-[#333333]'
-            }`}
-          >
-            Week View
-          </button>
+        <div className="flex gap-2 mb-6">
+          {['day', 'week', 'month', 'year'].map((mode) => (
+            <button
+              key={mode}
+              onClick={() => setViewMode(mode)}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                viewMode === mode
+                  ? 'bg-[#333333] text-white'
+                  : 'bg-white text-[#333333] hover:bg-stone-100'
+              }`}
+            >
+              {mode.charAt(0).toUpperCase() + mode.slice(1)}
+            </button>
+          ))}
         </div>
+        
         
         {viewMode === 'day' ? (
           <>
@@ -3230,10 +3349,16 @@ const HabitGoalTracker = () => {
                 
                 <div className="text-center">
                   <p className="text-lg font-bold text-[#333333]">
-                    {selectedDate.toLocaleDateString('en-US', { weekday: 'long' })}
+                    {viewMode === 'day' && selectedDate.toLocaleDateString('en-US', { weekday: 'long' })}
+                    {viewMode === 'week' && `Week of ${selectedDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`}
+                    {viewMode === 'month' && selectedDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+                    {viewMode === 'year' && selectedDate.getFullYear().toString()}
                   </p>
                   <p className="text-sm text-[#333333] opacity-70 font-mono">
-                    {selectedDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
+                    {viewMode === 'day' && selectedDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
+                    {viewMode === 'week' && selectedDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                    {viewMode === 'month' && selectedDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+                    {viewMode === 'year' && selectedDate.getFullYear().toString()}
                   </p>
                 </div>
                 
@@ -3283,32 +3408,6 @@ const HabitGoalTracker = () => {
               </p>
             </div>
             
-            {/* Habits List */}
-            <div className="bg-white rounded-xl shadow-md p-4">
-              <h3 className="font-bold text-[#333333] mb-3 text-sm uppercase tracking-wide">Habits</h3>
-              <div className="space-y-2">
-                {habitsForSelectedDate.length > 0 ? (
-                  habitsForSelectedDate.map(habit => (
-                    <div
-                      key={habit.id}
-                      className="flex items-center gap-3 p-3 bg-stone-50 rounded-lg"
-                    >
-                      {habit.completed ? (
-                        <CheckSquare className="text-black" size={20} strokeWidth={2.5} />
-                      ) : (
-                        <Circle className="text-[#333333] opacity-40" size={20} strokeWidth={2.5} />
-                      )}
-                      <span className={habit.completed ? "text-[#333333] font-medium" : "text-[#333333] opacity-50"}>
-                        {habit.name}
-                      </span>
-                    </div>
-                  ))
-                ) : (
-                  <p className="text-[#333333] opacity-50 text-sm text-center py-4">No habits scheduled for this day</p>
-                )}
-              </div>
-            </div>
-
             {/* Day Routine Completions */}
             {(() => {
               const dayRoutineCompletions = getRoutineCompletionsForDate(selectedDate);
@@ -3370,47 +3469,8 @@ const HabitGoalTracker = () => {
               return null;
             })()}
           </>
-        ) : (
+        ) : viewMode === 'week' ? (
           <>
-            {/* Week View */}
-            <div className="bg-white rounded-xl shadow-md p-4">
-              <h3 className="font-bold text-[#333333] mb-4 text-sm uppercase tracking-wide">Last 7 Days</h3>
-              <div className="space-y-3">
-                {last7Days.map((date, index) => {
-                  const dateHabits = getHabitsForDate(date);
-                  const rate = getCompletionRate(date);
-                  const isToday = getDateString(date) === getDateString(new Date());
-                  
-                  return (
-                    <div key={index} className={`p-3 rounded-lg ${isToday ? 'bg-stone-100 border-2 border-[#333333]' : 'bg-stone-50'}`}>
-                      <div className="flex items-center justify-between mb-2">
-                        <div>
-                          <p className="font-bold text-[#333333] text-sm">
-                            {date.toLocaleDateString('en-US', { weekday: 'short' })}
-                          </p>
-                          <p className="text-xs text-[#333333] opacity-70 font-mono">
-                            {date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                          </p>
-                        </div>
-                        <div className="text-right">
-                          <p className="font-bold text-lg text-[#333333] font-mono">{rate}%</p>
-                          <p className="text-xs text-[#333333] opacity-70">
-                            {dateHabits.filter(h => h.completed).length}/{dateHabits.length}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="w-full bg-stone-200 h-2 rounded-full">
-                        <div
-                          className="bg-black h-2 rounded-full transition-all"
-                          style={{ width: `${rate}%` }}
-                        ></div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-            
             {/* Week Summary */}
             <div className="bg-white rounded-xl shadow-md p-4">
               <h3 className="font-bold text-[#333333] mb-3 text-sm uppercase tracking-wide">Week Summary</h3>
@@ -3453,8 +3513,221 @@ const HabitGoalTracker = () => {
                 );
               })()}
             </div>
+
+            {/* Week View */}
+            <div className="bg-white rounded-xl shadow-md p-4">
+              <h3 className="font-bold text-[#333333] mb-4 text-sm uppercase tracking-wide">Last 7 Days</h3>
+              <div className="space-y-3">
+                {last7Days.map((date, index) => {
+                  const dateHabits = getHabitsForDate(date);
+                  const rate = getCompletionRate(date);
+                  const isToday = getDateString(date) === getDateString(new Date());
+                  
+                  return (
+                    <div key={index} className={`p-3 rounded-lg ${isToday ? 'bg-stone-100 border-2 border-[#333333]' : 'bg-stone-50'}`}>
+                      <div className="flex items-center justify-between mb-2">
+                        <div>
+                          <p className="font-bold text-[#333333] text-sm">
+                            {date.toLocaleDateString('en-US', { weekday: 'short' })}
+                          </p>
+                          <p className="text-xs text-[#333333] opacity-70 font-mono">
+                            {date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <p className="font-bold text-lg text-[#333333] font-mono">{rate}%</p>
+                          <p className="text-xs text-[#333333] opacity-70">
+                            {dateHabits.filter(h => h.completed).length}/{dateHabits.length}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="w-full bg-stone-200 h-2 rounded-full">
+                        <div
+                          className="bg-black h-2 rounded-full transition-all"
+                          style={{ width: `${rate}%` }}
+                        ></div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
           </>
-        )}
+        ) : viewMode === 'month' ? (
+          <>
+            {/* Month Summary */}
+            {(() => {
+              const monthStats = getMonthlyStats(selectedDate.getMonth(), selectedDate.getFullYear());
+              return (
+                <div className="bg-white rounded-xl shadow-md p-4">
+                  <h3 className="font-bold text-[#333333] mb-3 text-sm uppercase tracking-wide">Month Summary</h3>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="text-center p-3 bg-stone-50 rounded-lg">
+                      <p className="text-2xl font-bold text-[#333333] font-mono">{monthStats.avgRate}%</p>
+                      <p className="text-xs text-[#333333] opacity-70 uppercase tracking-wider mt-1">Avg Rate</p>
+                    </div>
+                    <div className="text-center p-3 bg-stone-50 rounded-lg">
+                      <p className="text-2xl font-bold text-[#333333] font-mono">{monthStats.perfectDays}</p>
+                      <p className="text-xs text-[#333333] opacity-70 uppercase tracking-wider mt-1">Perfect Days</p>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* Routine Statistics */}
+            <div className="bg-white rounded-xl shadow-md p-4">
+              <h3 className="font-bold text-[#333333] mb-3 text-sm uppercase tracking-wide">Routine Statistics</h3>
+              {(() => {
+                const stats = getRoutineStats();
+                return (
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="text-center p-3 bg-stone-50 rounded-lg">
+                      <p className="text-2xl font-bold text-[#333333] font-mono">
+                        {stats.completedRoutines}/{stats.totalRoutines}
+                      </p>
+                      <p className="text-xs text-[#333333] opacity-70 uppercase tracking-wider mt-1">Completed</p>
+                    </div>
+                    <div className="text-center p-3 bg-stone-50 rounded-lg">
+                      <p className="text-2xl font-bold text-[#333333] font-mono">
+                        {stats.averageTime}m
+                      </p>
+                      <p className="text-xs text-[#333333] opacity-70 uppercase tracking-wider mt-1">Avg Time</p>
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+
+            {/* Month View - Week by Week */}
+            <div className="bg-white rounded-xl shadow-md p-4">
+              <h3 className="font-bold text-[#333333] mb-4 text-sm uppercase tracking-wide">Weeks in {selectedDate.toLocaleDateString('en-US', { month: 'long' })}</h3>
+              <div className="space-y-3">
+                {(() => {
+                  const weeks = getWeeksInMonth(selectedDate);
+                  return weeks.map((week, index) => {
+                    const weekStats = getWeeklyStats(week.start, week.end);
+                    const isCurrentWeek = week.start <= new Date() && week.end >= new Date();
+                    
+                    return (
+                      <div key={index} className={`p-3 rounded-lg ${isCurrentWeek ? 'bg-stone-100 border-2 border-[#333333]' : 'bg-stone-50'}`}>
+                        <div className="flex items-center justify-between mb-2">
+                          <div>
+                            <p className="font-bold text-[#333333] text-sm">
+                              Week {index + 1}
+                            </p>
+                            <p className="text-xs text-[#333333] opacity-70 font-mono">
+                              {week.start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - {week.end.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                            </p>
+                          </div>
+                          <div className="text-right">
+                            <p className="font-bold text-lg text-[#333333] font-mono">{weekStats.avgRate}%</p>
+                            <p className="text-xs text-[#333333] opacity-70">
+                              {weekStats.completedHabits}/{weekStats.totalHabits} habits
+                            </p>
+                          </div>
+                        </div>
+                        <div className="w-full bg-stone-200 h-2 rounded-full">
+                          <div
+                            className="bg-black h-2 rounded-full transition-all"
+                            style={{ width: `${weekStats.avgRate}%` }}
+                          ></div>
+                        </div>
+                      </div>
+                    );
+                  });
+                })()}
+              </div>
+            </div>
+          </>
+        ) : viewMode === 'year' ? (
+          <>
+            {/* Year Summary */}
+            {(() => {
+              const yearStats = getYearlyStats(selectedDate.getFullYear());
+              return (
+                <div className="bg-white rounded-xl shadow-md p-4">
+                  <h3 className="font-bold text-[#333333] mb-3 text-sm uppercase tracking-wide">Year Summary</h3>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="text-center p-3 bg-stone-50 rounded-lg">
+                      <p className="text-2xl font-bold text-[#333333] font-mono">{yearStats.avgRate}%</p>
+                      <p className="text-xs text-[#333333] opacity-70 uppercase tracking-wider mt-1">Avg Rate</p>
+                    </div>
+                    <div className="text-center p-3 bg-stone-50 rounded-lg">
+                      <p className="text-2xl font-bold text-[#333333] font-mono">{yearStats.perfectDays}</p>
+                      <p className="text-xs text-[#333333] opacity-70 uppercase tracking-wider mt-1">Perfect Days</p>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* Routine Statistics */}
+            <div className="bg-white rounded-xl shadow-md p-4">
+              <h3 className="font-bold text-[#333333] mb-3 text-sm uppercase tracking-wide">Routine Statistics</h3>
+              {(() => {
+                const stats = getRoutineStats();
+                return (
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="text-center p-3 bg-stone-50 rounded-lg">
+                      <p className="text-2xl font-bold text-[#333333] font-mono">
+                        {stats.completedRoutines}/{stats.totalRoutines}
+                      </p>
+                      <p className="text-xs text-[#333333] opacity-70 uppercase tracking-wider mt-1">Completed</p>
+                    </div>
+                    <div className="text-center p-3 bg-stone-50 rounded-lg">
+                      <p className="text-2xl font-bold text-[#333333] font-mono">
+                        {stats.averageTime}m
+                      </p>
+                      <p className="text-xs text-[#333333] opacity-70 uppercase tracking-wider mt-1">Avg Time</p>
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+
+            {/* Year View - Month by Month */}
+            <div className="bg-white rounded-xl shadow-md p-4">
+              <h3 className="font-bold text-[#333333] mb-4 text-sm uppercase tracking-wide">Months in {selectedDate.getFullYear()}</h3>
+              <div className="space-y-3">
+                {(() => {
+                  const months = getMonthsInYear(selectedDate.getFullYear());
+                  return months.map((month, index) => {
+                    const monthStats = getMonthlyStats(month.getMonth(), month.getFullYear());
+                    const isCurrentMonth = month.getMonth() === new Date().getMonth() && month.getFullYear() === new Date().getFullYear();
+                    
+                    return (
+                      <div key={index} className={`p-3 rounded-lg ${isCurrentMonth ? 'bg-stone-100 border-2 border-[#333333]' : 'bg-stone-50'}`}>
+                        <div className="flex items-center justify-between mb-2">
+                          <div>
+                            <p className="font-bold text-[#333333] text-sm">
+                              {month.toLocaleDateString('en-US', { month: 'long' })}
+                            </p>
+                            <p className="text-xs text-[#333333] opacity-70 font-mono">
+                              {monthStats.perfectDays} perfect days
+                            </p>
+                          </div>
+                          <div className="text-right">
+                            <p className="font-bold text-lg text-[#333333] font-mono">{monthStats.avgRate}%</p>
+                            <p className="text-xs text-[#333333] opacity-70">
+                              {monthStats.completedHabits}/{monthStats.totalHabits} habits
+                            </p>
+                          </div>
+                        </div>
+                        <div className="w-full bg-stone-200 h-2 rounded-full">
+                          <div
+                            className="bg-black h-2 rounded-full transition-all"
+                            style={{ width: `${monthStats.avgRate}%` }}
+                          ></div>
+                        </div>
+                      </div>
+                    );
+                  });
+                })()}
+              </div>
+            </div>
+          </>
+        ) : null}
       </div>
     );
   };
