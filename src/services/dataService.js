@@ -63,6 +63,9 @@ class DataService {
           lastActive: serverTimestamp()
         },
         data: {
+          settings: {
+            timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC"
+          },
           routines: [
             {
               id: 1,
@@ -175,6 +178,11 @@ class DataService {
     return userData?.data?.lastResetDate || null;
   }
 
+  async getUserSettings() {
+    const userData = await this.getCurrentUserData();
+    return userData?.data?.settings || { timezone: "UTC" };
+  }
+
   // Specific Data Setters
   async updateRoutines(routines) {
     const userData = await this.getCurrentUserData();
@@ -237,6 +245,14 @@ class DataService {
     if (!userData) throw new Error('No user data found');
     
     userData.data.lastResetDate = dateString;
+    await this.updateUserData(userData.data);
+  }
+
+  async updateUserSettings(settings) {
+    const userData = await this.getCurrentUserData();
+    if (!userData) throw new Error('No user data found');
+    
+    userData.data.settings = settings;
     await this.updateUserData(userData.data);
   }
 
@@ -304,12 +320,26 @@ class DataService {
         }
       ];
 
+      let needsUpdate = false;
+
       // Check if we need to add any missing default routines
       const existingRoutineIds = userData.data.routines.map(r => r.id);
       const missingRoutines = defaultRoutines.filter(r => !existingRoutineIds.includes(r.id));
       
       if (missingRoutines.length > 0) {
         userData.data.routines = [...userData.data.routines, ...missingRoutines];
+        needsUpdate = true;
+      }
+
+      // Ensure settings exist
+      if (!userData.data.settings) {
+        userData.data.settings = {
+          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC"
+        };
+        needsUpdate = true;
+      }
+      
+      if (needsUpdate) {
         await this.updateUserData(userData.data);
       }
       

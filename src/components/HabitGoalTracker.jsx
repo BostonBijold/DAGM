@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Check, Circle, Plus, X, ChevronRight, Home, Target, Calendar, CheckSquare, Edit2, Trash2, Download, Upload, TrendingUp, ChevronLeft, User, Play, Pause, SkipBack, SkipForward, CheckCircle } from 'lucide-react';
+import { Check, Circle, Plus, X, ChevronRight, Home, Target, Calendar, CheckSquare, Edit2, Trash2, Download, Upload, TrendingUp, ChevronLeft, User, Play, Pause, SkipBack, SkipForward, CheckCircle, Settings } from 'lucide-react';
 import dataService from '../services/dataService';
 import authService from '../services/authService';
 
@@ -23,6 +23,8 @@ const HabitGoalTracker = () => {
   const [showHistory, setShowHistory] = useState(false);
   const [timerUpdateTrigger, setTimerUpdateTrigger] = useState(0);
   const [showUserManager, setShowUserManager] = useState(false);
+  const [userSettings, setUserSettings] = useState(null);
+  const [showSettings, setShowSettings] = useState(false);
   
   // Sample motivational quotes
   const quotes = [
@@ -101,14 +103,15 @@ const HabitGoalTracker = () => {
       // Ensure default routines exist
       await dataService.ensureDefaultRoutines();
       
-      const [routinesData, habitsData, goalsData, todosData, habitCompletionsData, habitCompletionTimesData, routineCompletionsData] = await Promise.all([
+      const [routinesData, habitsData, goalsData, todosData, habitCompletionsData, habitCompletionTimesData, routineCompletionsData, settingsData] = await Promise.all([
         dataService.getRoutines(),
         dataService.getHabits(),
         dataService.getGoals(),
         dataService.getTodos(),
         dataService.getHabitCompletions(),
         dataService.getHabitCompletionTimes(),
-        dataService.getRoutineCompletions()
+        dataService.getRoutineCompletions(),
+        dataService.getUserSettings()
       ]);
       
       setRoutines(routinesData);
@@ -118,6 +121,7 @@ const HabitGoalTracker = () => {
       setHabitCompletions(habitCompletionsData);
       setHabitCompletionTimes(habitCompletionTimesData);
       setRoutineCompletions(routineCompletionsData);
+      setUserSettings(settingsData);
     } catch (error) {
       console.error('Error loading user data:', error);
     }
@@ -133,16 +137,34 @@ const HabitGoalTracker = () => {
     }
   }, [routines, habitCompletions, currentDate]);
 
-  // Check if we need to reset habits for a new day
+  // Periodic check for midnight reset (every minute)
+  useEffect(() => {
+    if (!userSettings?.timezone) return;
+
+    const checkForMidnight = () => {
+      checkAndResetDailyHabits();
+    };
+
+    // Check immediately
+    checkForMidnight();
+
+    // Set up interval to check every minute
+    const interval = setInterval(checkForMidnight, 60000);
+
+    return () => clearInterval(interval);
+  }, [userSettings?.timezone]);
+
+  // Check if we need to reset habits and routines for a new day
   const checkAndResetDailyHabits = async () => {
     const today = getTodayString();
     const lastResetDate = await dataService.getLastResetDate();
     
-    // If this is a new day, reset all habit completions
+    // If this is a new day, reset all habit and routine completions
     if (lastResetDate !== today) {
       // Clear today's habit completions and completion times
       const currentCompletions = await dataService.getHabitCompletions();
       const currentCompletionTimes = await dataService.getHabitCompletionTimes();
+      const currentRoutineCompletions = await dataService.getRoutineCompletions();
       
       // Remove today's data if it exists
       if (currentCompletions[today]) {
@@ -151,14 +173,19 @@ const HabitGoalTracker = () => {
       if (currentCompletionTimes[today]) {
         delete currentCompletionTimes[today];
       }
+      if (currentRoutineCompletions[today]) {
+        delete currentRoutineCompletions[today];
+      }
       
       // Update the data
       await dataService.updateHabitCompletions(currentCompletions);
       await dataService.updateHabitCompletionTimes(currentCompletionTimes);
+      await dataService.updateRoutineCompletions(currentRoutineCompletions);
       
       // Update local state
       setHabitCompletions(currentCompletions);
       setHabitCompletionTimes(currentCompletionTimes);
+      setRoutineCompletions(currentRoutineCompletions);
       
       // Update last reset date
       await dataService.updateLastResetDate(today);
@@ -169,7 +196,7 @@ const HabitGoalTracker = () => {
       await dataService.updateTodos(filteredTodos);
       setTodos(filteredTodos);
       
-      console.log('Daily habit reset completed for', today);
+      console.log('Daily reset completed for', today, 'in timezone', userSettings?.timezone || 'UTC');
     }
   };
 
@@ -219,9 +246,19 @@ const HabitGoalTracker = () => {
     return () => clearInterval(interval);
   }, [activeTimers ? Object.keys(activeTimers).length : 0]);
   
-  // Get today's date string
+  // Get today's date string in user's timezone
   const getTodayString = () => {
-    return currentDate.toISOString().split('T')[0];
+    if (!userSettings?.timezone) {
+      return currentDate.toISOString().split('T')[0];
+    }
+    
+    try {
+      const userDate = new Date(currentDate.toLocaleString("en-US", { timeZone: userSettings.timezone }));
+      return userDate.toISOString().split('T')[0];
+    } catch (error) {
+      console.error('Error getting date in timezone:', error);
+      return currentDate.toISOString().split('T')[0];
+    }
   };
   
   // Modal Components
@@ -408,7 +445,7 @@ const HabitGoalTracker = () => {
     const [newHabitName, setNewHabitName] = useState('');
     const [newHabitDescription, setNewHabitDescription] = useState('');
     const [newHabitDuration, setNewHabitDuration] = useState('');
-    const [newHabitHasDuration, setNewHabitHasDuration] = useState(false);
+    const [newHabitHasDuration, setNewHabitHasDuration] = useState(true);
     const [newHabitExpectedTime, setNewHabitExpectedTime] = useState('');
     const [newHabitHasExpectedTime, setNewHabitHasExpectedTime] = useState(false);
     
@@ -446,8 +483,8 @@ const HabitGoalTracker = () => {
     };
     
     const handleAddHabit = () => {
-      if (newHabitName.trim()) {
-        const duration = newHabitHasDuration && newHabitDuration ? parseInt(newHabitDuration) : null;
+      if (newHabitName.trim() && newHabitDuration && parseInt(newHabitDuration) > 0) {
+        const duration = parseInt(newHabitDuration);
         const expectedTime = newHabitHasExpectedTime && newHabitExpectedTime ? parseInt(newHabitExpectedTime) : null;
         const newHabit = {
           id: Date.now(),
@@ -465,10 +502,12 @@ const HabitGoalTracker = () => {
         setNewHabitName('');
         setNewHabitDescription('');
         setNewHabitDuration('');
-        setNewHabitHasDuration(false);
+        setNewHabitHasDuration(true); // Keep duration required
         setNewHabitExpectedTime('');
         setNewHabitHasExpectedTime(false);
         setShowAddHabit(false);
+      } else {
+        alert('Please enter a habit name and duration (in minutes)');
       }
     };
     
@@ -678,31 +717,25 @@ const HabitGoalTracker = () => {
                     </div>
                     
                     <div>
-                      <label className="flex items-center gap-2 mb-2 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={newHabitHasDuration}
-                          onChange={(e) => setNewHabitHasDuration(e.target.checked)}
-                          className="w-4 h-4 text-[#333333] border-2 border-stone-300 rounded focus:ring-[#333333] focus:ring-2 cursor-pointer"
-                        />
-                        <span className="text-sm font-bold text-[#333333] uppercase tracking-wider">
-                          Set Timer Cap
-                        </span>
+                      <label className="block text-sm font-bold text-[#333333] mb-2 uppercase tracking-wider">
+                        Duration (Required) *
                       </label>
-                      {newHabitHasDuration && (
-                        <div className="flex items-center gap-2 mt-2">
-                          <input
-                            type="number"
-                            value={newHabitDuration}
-                            onChange={(e) => setNewHabitDuration(e.target.value)}
-                            placeholder="20"
-                            min="1"
-                            max="1440"
-                            className="w-20 px-3 py-2 border-2 border-stone-300 rounded-lg focus:outline-none focus:border-[#333333]"
-                          />
-                          <span className="text-sm text-[#333333] font-medium">minutes</span>
-                        </div>
-                      )}
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="number"
+                          value={newHabitDuration}
+                          onChange={(e) => setNewHabitDuration(e.target.value)}
+                          placeholder="20"
+                          min="1"
+                          max="1440"
+                          required
+                          className="w-20 px-3 py-2 border-2 border-stone-300 rounded-lg focus:outline-none focus:border-[#333333]"
+                        />
+                        <span className="text-sm text-[#333333] font-medium">minutes</span>
+                      </div>
+                      <p className="text-xs text-stone-500 mt-1">
+                        How long this habit should take to complete
+                      </p>
                     </div>
                     
                     <div>
@@ -1011,13 +1044,13 @@ const HabitGoalTracker = () => {
     const [habitName, setHabitName] = useState(habit?.name || '');
     const [habitDescription, setHabitDescription] = useState(habit?.description || '');
     const [habitDuration, setHabitDuration] = useState(habit?.duration || '');
-    const [hasDuration, setHasDuration] = useState(!!habit?.duration);
+    const [hasDuration, setHasDuration] = useState(true);
     const [expectedCompletionTime, setExpectedCompletionTime] = useState(habit?.expectedCompletionTime || '');
     const [hasExpectedTime, setHasExpectedTime] = useState(!!habit?.expectedCompletionTime);
     
     const handleSubmit = async () => {
-      if (habitName.trim()) {
-        const duration = hasDuration && habitDuration ? parseInt(habitDuration) : null;
+      if (habitName.trim() && habitDuration && parseInt(habitDuration) > 0) {
+        const duration = parseInt(habitDuration);
         const expectedTime = hasExpectedTime && expectedCompletionTime ? parseInt(expectedCompletionTime) : null;
         const updatedHabits = habits.map(h => 
           h.id === habit.id 
@@ -1033,6 +1066,8 @@ const HabitGoalTracker = () => {
         setHabits(updatedHabits);
         await dataService.updateHabits(updatedHabits);
         onClose();
+      } else {
+        alert('Please enter a habit name and duration (in minutes)');
       }
     };
     
@@ -1073,31 +1108,25 @@ const HabitGoalTracker = () => {
             </div>
             
             <div>
-              <label className="flex items-center gap-2 mb-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={hasDuration}
-                  onChange={(e) => setHasDuration(e.target.checked)}
-                  className="w-4 h-4 text-[#333333] border-2 border-stone-300 rounded focus:ring-[#333333] focus:ring-2 cursor-pointer"
-                />
-                <span className="text-sm font-bold text-[#333333] uppercase tracking-wider">
-                  Set Timer Cap
-                </span>
+              <label className="block text-sm font-bold text-[#333333] mb-2 uppercase tracking-wider">
+                Duration (Required) *
               </label>
-              {hasDuration && (
-                <div className="flex items-center gap-2 mt-2">
-                  <input
-                    type="number"
-                    value={habitDuration}
-                    onChange={(e) => setHabitDuration(e.target.value)}
-                    placeholder="20"
-                    min="1"
-                    max="1440"
-                    className="w-20 px-3 py-2 border-2 border-stone-300 rounded-lg focus:outline-none focus:border-[#333333]"
-                  />
-                  <span className="text-sm text-[#333333] font-medium">minutes</span>
-                </div>
-              )}
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  value={habitDuration}
+                  onChange={(e) => setHabitDuration(e.target.value)}
+                  placeholder="20"
+                  min="1"
+                  max="1440"
+                  required
+                  className="w-20 px-3 py-2 border-2 border-stone-300 rounded-lg focus:outline-none focus:border-[#333333]"
+                />
+                <span className="text-sm text-[#333333] font-medium">minutes</span>
+              </div>
+              <p className="text-xs text-stone-500 mt-1">
+                How long this habit should take to complete
+              </p>
             </div>
             
             <div>
@@ -1143,6 +1172,104 @@ const HabitGoalTracker = () => {
                 Save Changes
               </button>
             </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  // Settings Modal
+  const SettingsModal = ({ onClose }) => {
+    const [timezone, setTimezone] = useState(userSettings?.timezone || 'UTC');
+    const [isLoading, setIsLoading] = useState(false);
+
+    // Common timezones for the dropdown
+    const commonTimezones = [
+      'UTC',
+      'America/New_York',
+      'America/Chicago', 
+      'America/Denver',
+      'America/Los_Angeles',
+      'America/Toronto',
+      'America/Vancouver',
+      'Europe/London',
+      'Europe/Paris',
+      'Europe/Berlin',
+      'Europe/Rome',
+      'Asia/Tokyo',
+      'Asia/Shanghai',
+      'Asia/Kolkata',
+      'Australia/Sydney',
+      'Australia/Melbourne',
+      'Pacific/Auckland'
+    ];
+
+    const handleSave = async () => {
+      setIsLoading(true);
+      try {
+        const newSettings = { timezone };
+        setUserSettings(newSettings);
+        await dataService.updateUserSettings(newSettings);
+        onClose();
+      } catch (error) {
+        console.error('Error saving settings:', error);
+        alert('Error saving settings. Please try again.');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div className="bg-white rounded-xl shadow-2xl p-6 w-full max-w-md mx-4">
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-xl font-bold text-[#333333] uppercase tracking-wide">
+              Settings
+            </h2>
+            <button
+              onClick={onClose}
+              className="p-1 hover:bg-stone-100 rounded transition-colors"
+            >
+              <X size={20} strokeWidth={2.5} className="text-[#333333] opacity-60" />
+            </button>
+          </div>
+          
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-bold text-[#333333] mb-2 uppercase tracking-wider">
+                Timezone
+              </label>
+              <select
+                value={timezone}
+                onChange={(e) => setTimezone(e.target.value)}
+                className="w-full px-3 py-2 border-2 border-stone-300 rounded-lg focus:outline-none focus:border-[#333333] text-sm"
+              >
+                {commonTimezones.map(tz => (
+                  <option key={tz} value={tz}>
+                    {tz.replace('_', ' ')}
+                  </option>
+                ))}
+              </select>
+              <p className="text-xs text-stone-500 mt-1">
+                Routines will reset at midnight in your selected timezone
+              </p>
+            </div>
+          </div>
+          
+          <div className="flex gap-2 pt-6">
+            <button
+              onClick={onClose}
+              className="flex-1 px-4 py-2.5 border-2 border-[#333333] text-[#333333] rounded-lg hover:bg-stone-100 font-bold uppercase text-sm tracking-wider transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleSave}
+              disabled={isLoading}
+              className="flex-1 px-4 py-2.5 bg-black text-white rounded-lg hover:bg-[#333333] font-bold uppercase text-sm tracking-wider shadow-lg transition-all hover:shadow-xl hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isLoading ? 'Saving...' : 'Save Settings'}
+            </button>
           </div>
         </div>
       </div>
@@ -1263,9 +1390,18 @@ const HabitGoalTracker = () => {
                 </p>
               </div>
               <div>
-                <p className="text-xs text-[#333333] opacity-70 uppercase tracking-wider">Total Time</p>
+                <p className="text-xs text-[#333333] opacity-70 uppercase tracking-wider">Elapsed Time</p>
                 <p className="text-sm font-bold text-[#333333] font-mono">
                   {Math.floor(routineElapsed)}m {Math.round((routineElapsed % 1) * 60)}s
+                </p>
+              </div>
+              <div>
+                <p className="text-xs text-[#333333] opacity-70 uppercase tracking-wider">Estimated</p>
+                <p className="text-sm font-bold text-[#333333] font-mono">
+                  {(() => {
+                    const durationInfo = calculateRoutineDuration(activeRoutine.id);
+                    return durationInfo.totalDuration > 0 ? `${durationInfo.totalDuration}m` : 'Unknown';
+                  })()}
                 </p>
               </div>
             </div>
@@ -1880,6 +2016,30 @@ const HabitGoalTracker = () => {
     return streak;
   };
 
+  // Calculate total routine duration from habit durations
+  const calculateRoutineDuration = (routineId) => {
+    const routine = routines.find(r => r.id === routineId);
+    if (!routine) return 0;
+
+    let totalDuration = 0;
+    let unknownDurationCount = 0;
+
+    routine.habits.forEach(habitId => {
+      const habit = habits.find(h => h.id === habitId);
+      if (habit && habit.duration) {
+        totalDuration += habit.duration;
+      } else {
+        unknownDurationCount++;
+      }
+    });
+
+    return {
+      totalDuration,
+      unknownDurationCount,
+      hasUnknownDurations: unknownDurationCount > 0
+    };
+  };
+
   // Routine Control Functions
   const startRoutine = (routineId) => {
     const routine = routines.find(r => r.id === routineId);
@@ -2139,6 +2299,9 @@ const HabitGoalTracker = () => {
     const totalTime = (Date.now() - routineStartTime) / 1000 / 60; // in minutes
     const today = getTodayString();
     
+    // Calculate estimated routine duration
+    const routineDurationInfo = calculateRoutineDuration(activeRoutine.id);
+    
     // Collect habit times for this routine
     const habitTimes = {};
     activeRoutine.habits.forEach(habitId => {
@@ -2156,10 +2319,12 @@ const HabitGoalTracker = () => {
         ...(currentRoutineCompletions[today] || {}),
         [activeRoutine.id]: {
           totalTime: totalTime,
+          estimatedTime: routineDurationInfo.totalDuration,
           startTime: new Date(routineStartTime).toISOString(),
           endTime: new Date().toISOString(),
           completed: true,
-          habitTimes: habitTimes
+          habitTimes: habitTimes,
+          hasUnknownDurations: routineDurationInfo.hasUnknownDurations
         }
       }
     };
@@ -2312,6 +2477,18 @@ const HabitGoalTracker = () => {
     
     return (
       <div className="space-y-4">
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <h2 className="text-2xl font-bold text-[#333333] uppercase tracking-wide">Dashboard</h2>
+          <button
+            onClick={() => setShowSettings(true)}
+            className="p-2 hover:bg-stone-100 rounded-lg transition-colors"
+            title="Settings"
+          >
+            <Settings size={20} strokeWidth={2.5} className="text-[#333333] opacity-60" />
+          </button>
+        </div>
+        
         {/* Date Display */}
         <div className="bg-white rounded-xl shadow-md p-4">
           <h2 className="text-lg font-bold text-[#333333] mb-2">Today</h2>
@@ -2616,13 +2793,22 @@ const HabitGoalTracker = () => {
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <h2 className="text-2xl font-bold text-[#333333] uppercase tracking-wide">Routines</h2>
-          <button
-            onClick={() => setShowHistory(true)}
-            className="flex items-center gap-2 bg-black text-white px-4 py-2 rounded-lg hover:bg-[#333333] font-bold uppercase text-xs tracking-wider shadow-lg transition-all hover:shadow-xl hover:scale-105"
-          >
-            <TrendingUp size={18} strokeWidth={2.5} />
-            History
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowSettings(true)}
+              className="p-2 hover:bg-stone-100 rounded-lg transition-colors"
+              title="Settings"
+            >
+              <Settings size={20} strokeWidth={2.5} className="text-[#333333] opacity-60" />
+            </button>
+            <button
+              onClick={() => setShowHistory(true)}
+              className="flex items-center gap-2 bg-black text-white px-4 py-2 rounded-lg hover:bg-[#333333] font-bold uppercase text-xs tracking-wider shadow-lg transition-all hover:shadow-xl hover:scale-105"
+            >
+              <TrendingUp size={18} strokeWidth={2.5} />
+              History
+            </button>
+          </div>
         </div>
         
         {routines.map(routine => (
@@ -2646,10 +2832,26 @@ const HabitGoalTracker = () => {
               </span>
             </div>
             
-            <div className="mb-2">
+            <div className="mb-2 flex items-center gap-2">
               <span className="text-xs bg-stone-200 text-[#333333] px-2 py-1 font-mono rounded">
                 {routine.timeOfDay.toUpperCase()}
               </span>
+              {(() => {
+                const durationInfo = calculateRoutineDuration(routine.id);
+                if (durationInfo.totalDuration > 0) {
+                  return (
+                    <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 font-mono rounded">
+                      {durationInfo.totalDuration}m total
+                      {durationInfo.hasUnknownDurations && ` (+${durationInfo.unknownDurationCount} unknown)`}
+                    </span>
+                  );
+                }
+                return (
+                  <span className="text-xs bg-yellow-100 text-yellow-800 px-2 py-1 font-mono rounded">
+                    Duration unknown
+                  </span>
+                );
+              })()}
             </div>
             
             <div className="space-y-2">
@@ -2784,13 +2986,22 @@ const HabitGoalTracker = () => {
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <h2 className="text-2xl font-bold text-[#333333] uppercase tracking-wide">Goals</h2>
-          <button
-            onClick={() => setShowGoalModal(true)}
-            className="flex items-center gap-2 bg-black text-white px-5 py-2.5 rounded-lg hover:bg-[#333333] font-bold uppercase text-sm tracking-wider shadow-lg transition-all hover:shadow-xl hover:scale-105"
-          >
-            <Plus size={20} strokeWidth={2.5} />
-            New Goal
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowSettings(true)}
+              className="p-2 hover:bg-stone-100 rounded-lg transition-colors"
+              title="Settings"
+            >
+              <Settings size={20} strokeWidth={2.5} className="text-[#333333] opacity-60" />
+            </button>
+            <button
+              onClick={() => setShowGoalModal(true)}
+              className="flex items-center gap-2 bg-black text-white px-5 py-2.5 rounded-lg hover:bg-[#333333] font-bold uppercase text-sm tracking-wider shadow-lg transition-all hover:shadow-xl hover:scale-105"
+            >
+              <Plus size={20} strokeWidth={2.5} />
+              New Goal
+            </button>
+          </div>
         </div>
         
         {goals.map(goal => (
@@ -3126,7 +3337,22 @@ const HabitGoalTracker = () => {
                               </span>
                             </div>
                             <div className="text-sm text-[#333333] opacity-70">
-                              <p>Total Time: {Math.round(completion.totalTime * 10) / 10}m</p>
+                              <div className="flex items-center gap-4 mb-1">
+                                <p>Actual: {Math.round(completion.totalTime * 10) / 10}m</p>
+                                {completion.estimatedTime && (
+                                  <p>Estimated: {completion.estimatedTime}m</p>
+                                )}
+                                {completion.estimatedTime && (
+                                  <p className={`font-medium ${
+                                    completion.totalTime <= completion.estimatedTime 
+                                      ? 'text-green-600' 
+                                      : 'text-orange-600'
+                                  }`}>
+                                    {completion.totalTime <= completion.estimatedTime ? '✓' : '⚠'} 
+                                    {Math.round(((completion.totalTime / completion.estimatedTime) - 1) * 100)}%
+                                  </p>
+                                )}
+                              </div>
                               {completion.startTime && (
                                 <p>Started: {new Date(completion.startTime).toLocaleTimeString()}</p>
                               )}
@@ -3351,6 +3577,12 @@ const HabitGoalTracker = () => {
               setShowHabitEditModal(false);
               setEditingHabit(null);
             }} 
+          />
+        )}
+
+        {showSettings && (
+          <SettingsModal 
+            onClose={() => setShowSettings(false)} 
           />
         )}
 
