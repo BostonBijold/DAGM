@@ -91,7 +91,8 @@ class DataService {
           todos: [],
           habitCompletions: {},
           habitCompletionTimes: {},
-          routineCompletions: {}
+          routineCompletions: {},
+          lastResetDate: null
         }
       };
 
@@ -169,6 +170,11 @@ class DataService {
     return userData?.data?.routineCompletions || {};
   }
 
+  async getLastResetDate() {
+    const userData = await this.getCurrentUserData();
+    return userData?.data?.lastResetDate || null;
+  }
+
   // Specific Data Setters
   async updateRoutines(routines) {
     const userData = await this.getCurrentUserData();
@@ -223,6 +229,14 @@ class DataService {
     if (!userData) throw new Error('No user data found');
     
     userData.data.routineCompletions = routineCompletions;
+    await this.updateUserData(userData.data);
+  }
+
+  async updateLastResetDate(dateString) {
+    const userData = await this.getCurrentUserData();
+    if (!userData) throw new Error('No user data found');
+    
+    userData.data.lastResetDate = dateString;
     await this.updateUserData(userData.data);
   }
 
