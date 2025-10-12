@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Check, Circle, Plus, X, ChevronRight, Home, Target, Calendar, CheckSquare, Edit2, Trash2, Download, Upload, TrendingUp, ChevronLeft, User, Play, Pause, SkipBack, SkipForward, CheckCircle, Settings } from 'lucide-react';
+import { Check, Circle, Plus, X, ChevronRight, Home, Target, Calendar, CheckSquare, Edit2, Trash2, Download, Upload, TrendingUp, ChevronLeft, User, Play, Pause, SkipBack, SkipForward, CheckCircle, Settings, GripVertical } from 'lucide-react';
 import dataService from '../services/dataService';
 import authService from '../services/authService';
 
@@ -25,6 +25,15 @@ const HabitGoalTracker = () => {
   const [showUserManager, setShowUserManager] = useState(false);
   const [userSettings, setUserSettings] = useState(null);
   const [showSettings, setShowSettings] = useState(false);
+  
+  // New state for routine and single habit management
+  const [showAddRoutineModal, setShowAddRoutineModal] = useState(false);
+  const [showAddSingleHabitModal, setShowAddSingleHabitModal] = useState(false);
+  const [dashboardOrder, setDashboardOrder] = useState([]);
+  const [showDeleteRoutineModal, setShowDeleteRoutineModal] = useState(false);
+  const [routineToDelete, setRoutineToDelete] = useState(null);
+  const [showOrderRoutinesModal, setShowOrderRoutinesModal] = useState(false);
+  const [showAddChoiceModal, setShowAddChoiceModal] = useState(false);
   
   // Sample motivational quotes
   const quotes = [
@@ -103,7 +112,7 @@ const HabitGoalTracker = () => {
       // Ensure default routines exist
       await dataService.ensureDefaultRoutines();
       
-      const [routinesData, habitsData, goalsData, todosData, habitCompletionsData, habitCompletionTimesData, routineCompletionsData, settingsData] = await Promise.all([
+      const [routinesData, habitsData, goalsData, todosData, habitCompletionsData, habitCompletionTimesData, routineCompletionsData, settingsData, dashboardOrderData] = await Promise.all([
         dataService.getRoutines(),
         dataService.getHabits(),
         dataService.getGoals(),
@@ -111,7 +120,8 @@ const HabitGoalTracker = () => {
         dataService.getHabitCompletions(),
         dataService.getHabitCompletionTimes(),
         dataService.getRoutineCompletions(),
-        dataService.getUserSettings()
+        dataService.getUserSettings(),
+        dataService.getDashboardOrder()
       ]);
       
       setRoutines(routinesData);
@@ -122,6 +132,7 @@ const HabitGoalTracker = () => {
       setHabitCompletionTimes(habitCompletionTimesData);
       setRoutineCompletions(routineCompletionsData);
       setUserSettings(settingsData);
+      setDashboardOrder(dashboardOrderData);
     } catch (error) {
       console.error('Error loading user data:', error);
     }
@@ -424,6 +435,345 @@ const HabitGoalTracker = () => {
                 className="flex-1 px-4 py-2.5 bg-black text-white rounded-lg hover:bg-[#333333] font-bold uppercase text-sm tracking-wider shadow-lg transition-all hover:shadow-xl hover:scale-105"
               >
                 Add Task
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  // Add Routine Modal
+  const AddRoutineModal = ({ onClose }) => {
+    const [routineName, setRoutineName] = useState('');
+    const [routineTime, setRoutineTime] = useState('morning');
+    const [routineDays, setRoutineDays] = useState(['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']);
+    
+    const days = [
+      { key: 'monday', label: 'Mon' },
+      { key: 'tuesday', label: 'Tue' },
+      { key: 'wednesday', label: 'Wed' },
+      { key: 'thursday', label: 'Thu' },
+      { key: 'friday', label: 'Fri' },
+      { key: 'saturday', label: 'Sat' },
+      { key: 'sunday', label: 'Sun' }
+    ];
+    
+    const handleDayToggle = (day) => {
+      setRoutineDays(prev => 
+        prev.includes(day) 
+          ? prev.filter(d => d !== day)
+          : [...prev, day]
+      );
+    };
+    
+    const handleSubmit = async () => {
+      if (routineName.trim() && routineDays.length > 0) {
+        await addRoutine({
+          name: routineName.trim(),
+          timeOfDay: routineTime,
+          days: routineDays
+        });
+        onClose();
+      } else {
+        alert('Please enter a routine name and select at least one day');
+      }
+    };
+    
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
+        <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6">
+          <div className="flex justify-between items-center mb-4 pb-3 border-b border-stone-200">
+            <h3 className="text-xl font-bold text-[#333333] uppercase tracking-wide">New Routine</h3>
+            <button onClick={onClose} className="text-[#333333] hover:opacity-60">
+              <X size={24} strokeWidth={2.5} />
+            </button>
+          </div>
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-bold text-[#333333] mb-2 uppercase tracking-wider">
+                Name *
+              </label>
+              <input
+                type="text"
+                value={routineName}
+                onChange={(e) => setRoutineName(e.target.value)}
+                placeholder="Workout Routine"
+                className="w-full px-3 py-2 border-2 border-stone-300 rounded-lg focus:outline-none focus:border-[#333333]"
+                autoFocus
+              />
+            </div>
+            
+            <div>
+              <label className="block text-sm font-bold text-[#333333] mb-2 uppercase tracking-wider">
+                Time of Day
+              </label>
+              <select
+                value={routineTime}
+                onChange={(e) => setRoutineTime(e.target.value)}
+                className="w-full px-3 py-2 border-2 border-stone-300 rounded-lg focus:outline-none focus:border-[#333333]"
+              >
+                <option value="morning">Morning</option>
+                <option value="afternoon">Afternoon</option>
+                <option value="evening">Evening</option>
+                <option value="">Any Time</option>
+              </select>
+            </div>
+            
+            <div>
+              <label className="block text-sm font-bold text-[#333333] mb-2 uppercase tracking-wider">
+                Days *
+              </label>
+              <div className="grid grid-cols-7 gap-2">
+                {days.map(day => (
+                  <button
+                    key={day.key}
+                    onClick={() => handleDayToggle(day.key)}
+                    className={`p-2 rounded-lg text-xs font-bold uppercase tracking-wider transition-all ${
+                      routineDays.includes(day.key)
+                        ? 'bg-black text-white'
+                        : 'bg-stone-100 text-[#333333] hover:bg-stone-200'
+                    }`}
+                  >
+                    {day.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            
+            <div className="flex gap-2 pt-2">
+              <button
+                onClick={onClose}
+                className="flex-1 px-4 py-2.5 border-2 border-[#333333] text-[#333333] rounded-lg hover:bg-stone-100 font-bold uppercase text-sm tracking-wider transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSubmit}
+                className="flex-1 px-4 py-2.5 bg-black text-white rounded-lg hover:bg-[#333333] font-bold uppercase text-sm tracking-wider shadow-lg transition-all hover:shadow-xl hover:scale-105"
+              >
+                Create Routine
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  // Add Single Habit Modal
+  const AddSingleHabitModal = ({ onClose }) => {
+    const [habitName, setHabitName] = useState('');
+    const [habitDescription, setHabitDescription] = useState('');
+    const [trackingType, setTrackingType] = useState('simple');
+    const [duration, setDuration] = useState('');
+    const [expectedTime, setExpectedTime] = useState('');
+    const [hasExpectedTime, setHasExpectedTime] = useState(false);
+    
+    const handleSubmit = async () => {
+      if (habitName.trim()) {
+        const habitData = {
+          name: habitName.trim(),
+          description: habitDescription.trim(),
+          trackingType: trackingType,
+          duration: trackingType === 'timed' && duration ? parseInt(duration) : null,
+          expectedCompletionTime: hasExpectedTime && expectedTime ? parseInt(expectedTime) : null
+        };
+        
+        await addSingleHabit(habitData);
+        onClose();
+      } else {
+        alert('Please enter a habit name');
+      }
+    };
+    
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
+        <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6">
+          <div className="flex justify-between items-center mb-4 pb-3 border-b border-stone-200">
+            <h3 className="text-xl font-bold text-[#333333] uppercase tracking-wide">New Single Habit</h3>
+            <button onClick={onClose} className="text-[#333333] hover:opacity-60">
+              <X size={24} strokeWidth={2.5} />
+            </button>
+          </div>
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-bold text-[#333333] mb-2 uppercase tracking-wider">
+                Name *
+              </label>
+              <input
+                type="text"
+                value={habitName}
+                onChange={(e) => setHabitName(e.target.value)}
+                placeholder="Drink creatine"
+                className="w-full px-3 py-2 border-2 border-stone-300 rounded-lg focus:outline-none focus:border-[#333333]"
+                autoFocus
+              />
+            </div>
+            
+            <div>
+              <label className="block text-sm font-bold text-[#333333] mb-2 uppercase tracking-wider">
+                Description (optional)
+              </label>
+              <textarea
+                value={habitDescription}
+                onChange={(e) => setHabitDescription(e.target.value)}
+                placeholder="Why is this habit important?"
+                className="w-full px-3 py-2 border-2 border-stone-300 rounded-lg focus:outline-none focus:border-[#333333]"
+                rows="2"
+              />
+            </div>
+            
+            <div>
+              <label className="block text-sm font-bold text-[#333333] mb-2 uppercase tracking-wider">
+                Tracking Type
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  onClick={() => setTrackingType('simple')}
+                  className={`p-3 rounded-lg font-bold uppercase text-sm tracking-wider transition-all ${
+                    trackingType === 'simple'
+                      ? 'bg-black text-white'
+                      : 'bg-stone-100 text-[#333333] hover:bg-stone-200'
+                  }`}
+                >
+                  Simple Check
+                </button>
+                <button
+                  onClick={() => setTrackingType('timed')}
+                  className={`p-3 rounded-lg font-bold uppercase text-sm tracking-wider transition-all ${
+                    trackingType === 'timed'
+                      ? 'bg-black text-white'
+                      : 'bg-stone-100 text-[#333333] hover:bg-stone-200'
+                  }`}
+                >
+                  Timed
+                </button>
+              </div>
+            </div>
+            
+            {trackingType === 'timed' && (
+              <>
+                <div>
+                  <label className="block text-sm font-bold text-[#333333] mb-2 uppercase tracking-wider">
+                    Duration (minutes)
+                  </label>
+                  <input
+                    type="number"
+                    value={duration}
+                    onChange={(e) => setDuration(e.target.value)}
+                    placeholder="15"
+                    className="w-full px-3 py-2 border-2 border-stone-300 rounded-lg focus:outline-none focus:border-[#333333]"
+                  />
+                </div>
+                
+                <div>
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={hasExpectedTime}
+                      onChange={(e) => setHasExpectedTime(e.target.checked)}
+                      className="w-4 h-4"
+                    />
+                    <span className="text-sm font-bold text-[#333333] uppercase tracking-wider">
+                      Set Expected Completion Time
+                    </span>
+                  </label>
+                  {hasExpectedTime && (
+                    <input
+                      type="number"
+                      value={expectedTime}
+                      onChange={(e) => setExpectedTime(e.target.value)}
+                      placeholder="10"
+                      className="w-full mt-2 px-3 py-2 border-2 border-stone-300 rounded-lg focus:outline-none focus:border-[#333333]"
+                    />
+                  )}
+                </div>
+              </>
+            )}
+            
+            <div className="flex gap-2 pt-2">
+              <button
+                onClick={onClose}
+                className="flex-1 px-4 py-2.5 border-2 border-[#333333] text-[#333333] rounded-lg hover:bg-stone-100 font-bold uppercase text-sm tracking-wider transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSubmit}
+                className="flex-1 px-4 py-2.5 bg-black text-white rounded-lg hover:bg-[#333333] font-bold uppercase text-sm tracking-wider shadow-lg transition-all hover:shadow-xl hover:scale-105"
+              >
+                Add Habit
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  // Delete Routine Confirmation Modal
+  const DeleteRoutineModal = ({ routine, onClose }) => {
+    const [keepHabitsAsSingles, setKeepHabitsAsSingles] = useState(true);
+    
+    const handleDelete = async () => {
+      await deleteRoutine(routine.id, keepHabitsAsSingles);
+      onClose();
+    };
+    
+    const routineHabits = habits.filter(h => h.routineId === routine.id);
+    
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
+        <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6">
+          <div className="flex justify-between items-center mb-4 pb-3 border-b border-stone-200">
+            <h3 className="text-xl font-bold text-[#333333] uppercase tracking-wide">Delete Routine</h3>
+            <button onClick={onClose} className="text-[#333333] hover:opacity-60">
+              <X size={24} strokeWidth={2.5} />
+            </button>
+          </div>
+          <div className="space-y-4">
+            <p className="text-[#333333]">
+              Are you sure you want to delete <strong>"{routine.name}"</strong>?
+            </p>
+            
+            {routineHabits.length > 0 && (
+              <div>
+                <p className="text-sm text-[#333333] mb-2">
+                  This routine has {routineHabits.length} habit{routineHabits.length !== 1 ? 's' : ''}:
+                </p>
+                <ul className="text-sm text-[#333333] opacity-70 mb-3">
+                  {routineHabits.map(habit => (
+                    <li key={habit.id}>• {habit.name}</li>
+                  ))}
+                </ul>
+                
+                <label className="flex items-start gap-2">
+                  <input
+                    type="checkbox"
+                    checked={keepHabitsAsSingles}
+                    onChange={(e) => setKeepHabitsAsSingles(e.target.checked)}
+                    className="w-4 h-4 mt-1"
+                  />
+                  <span className="text-sm text-[#333333]">
+                    Keep habits as single habits (remove from routine but keep them)
+                  </span>
+                </label>
+              </div>
+            )}
+            
+            <div className="flex gap-2 pt-2">
+              <button
+                onClick={onClose}
+                className="flex-1 px-4 py-2.5 border-2 border-[#333333] text-[#333333] rounded-lg hover:bg-stone-100 font-bold uppercase text-sm tracking-wider transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDelete}
+                className="flex-1 px-4 py-2.5 bg-red-600 text-white rounded-lg hover:bg-red-700 font-bold uppercase text-sm tracking-wider shadow-lg transition-all hover:shadow-xl hover:scale-105"
+              >
+                Delete
               </button>
             </div>
           </div>
@@ -793,6 +1143,16 @@ const HabitGoalTracker = () => {
                 className="flex-1 px-4 py-2.5 border-2 border-[#333333] text-[#333333] rounded-lg hover:bg-stone-100 font-bold uppercase text-sm tracking-wider transition-colors"
               >
                 Cancel
+              </button>
+              <button
+                onClick={() => {
+                  onClose();
+                  setRoutineToDelete(routine);
+                  setShowDeleteRoutineModal(true);
+                }}
+                className="px-4 py-2.5 bg-red-500 text-white rounded-lg hover:bg-red-600 font-bold uppercase text-sm tracking-wider shadow-lg transition-all hover:shadow-xl hover:scale-105"
+              >
+                <Trash2 size={16} strokeWidth={2.5} />
               </button>
               <button
                 onClick={handleSubmit}
@@ -1269,6 +1629,291 @@ const HabitGoalTracker = () => {
               className="flex-1 px-4 py-2.5 bg-black text-white rounded-lg hover:bg-[#333333] font-bold uppercase text-sm tracking-wider shadow-lg transition-all hover:shadow-xl hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isLoading ? 'Saving...' : 'Save Settings'}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  // Order Routines Modal
+  const OrderRoutinesModal = ({ onClose }) => {
+    const [draggedItem, setDraggedItem] = useState(null);
+    const [draggedOverItem, setDraggedOverItem] = useState(null);
+    const [orderedItems, setOrderedItems] = useState([]);
+
+    // Initialize ordered items on modal open
+    useEffect(() => {
+      // Use dashboard order if available, otherwise use routine order
+      if (dashboardOrder.length > 0) {
+        const singleHabits = habits.filter(h => h.routineId === null);
+        const allItems = [
+          ...routines.map(r => ({ ...r, type: 'routine' })),
+          ...singleHabits.map(h => ({ ...h, type: 'habit' }))
+        ];
+        
+        // Sort by dashboard order
+        const orderedItems = dashboardOrder
+          .map(orderItem => allItems.find(item => item.type === orderItem.type && item.id === orderItem.id))
+          .filter(Boolean);
+        
+        setOrderedItems(orderedItems);
+      } else {
+        // Fallback to routine order
+        const routinesSorted = [...routines].sort((a, b) => a.order - b.order);
+        const singleHabits = habits.filter(h => h.routineId === null);
+        
+        const items = [
+          ...routinesSorted.map(routine => ({ ...routine, type: 'routine' })),
+          ...singleHabits.map(habit => ({ ...habit, type: 'habit' }))
+        ];
+        
+        setOrderedItems(items);
+      }
+    }, [routines, habits, dashboardOrder]);
+
+    const handleDragStart = (e, item) => {
+      setDraggedItem(item);
+      e.dataTransfer.effectAllowed = 'move';
+      e.target.style.opacity = '0.5';
+    };
+
+    const handleDragOver = (e, item) => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      setDraggedOverItem(item);
+    };
+
+    const handleDragLeave = () => {
+      setDraggedOverItem(null);
+    };
+
+    const handleDrop = (e, targetItem) => {
+      e.preventDefault();
+      
+      if (!draggedItem || draggedItem.id === targetItem.id) {
+        setDraggedItem(null);
+        setDraggedOverItem(null);
+        return;
+      }
+
+      const newOrderedItems = [...orderedItems];
+      const draggedIndex = newOrderedItems.findIndex(item => item.id === draggedItem.id);
+      const targetIndex = newOrderedItems.findIndex(item => item.id === targetItem.id);
+
+      // Remove dragged item
+      const [removedItem] = newOrderedItems.splice(draggedIndex, 1);
+      
+      // Insert at new position
+      newOrderedItems.splice(targetIndex, 0, removedItem);
+
+      setOrderedItems(newOrderedItems);
+      setDraggedItem(null);
+      setDraggedOverItem(null);
+    };
+
+    const handleDragEnd = (e) => {
+      e.target.style.opacity = '1';
+      setDraggedItem(null);
+      setDraggedOverItem(null);
+    };
+
+    const handleSave = async () => {
+      try {
+        // Update routine orders
+        const updatedRoutines = orderedItems
+          .filter(item => item.type === 'routine')
+          .map((item, index) => ({ ...item, order: index }));
+
+        // Update habit orders (if they have order property)
+        const updatedHabits = habits.map(habit => {
+          const orderedItem = orderedItems.find(item => item.type === 'habit' && item.id === habit.id);
+          if (orderedItem) {
+            const newOrder = orderedItems.findIndex(item => item.type === 'habit' && item.id === habit.id);
+            return { ...habit, order: newOrder };
+          }
+          return habit;
+        });
+
+        // Update dashboard order to match the new ordering
+        const newDashboardOrder = orderedItems.map((item, index) => ({
+          type: item.type,
+          id: item.id,
+          order: index
+        }));
+
+        await dataService.updateRoutines(updatedRoutines);
+        await dataService.updateHabits(updatedHabits);
+        await dataService.updateDashboardOrder(newDashboardOrder);
+        
+        setRoutines(updatedRoutines);
+        setHabits(updatedHabits);
+        setDashboardOrder(newDashboardOrder);
+        onClose();
+      } catch (error) {
+        console.error('Error saving order:', error);
+        alert('Error saving order. Please try again.');
+      }
+    };
+
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div className="bg-white rounded-xl shadow-2xl w-full max-w-md max-h-[80vh] flex flex-col">
+          <div className="p-6 border-b border-stone-200">
+            <div className="flex items-center justify-between">
+              <h2 className="text-xl font-bold text-[#333333] uppercase tracking-wide">
+                Order Routines & Habits
+              </h2>
+              <button
+                onClick={onClose}
+                className="p-2 hover:bg-stone-100 rounded-lg transition-colors"
+              >
+                <X size={20} strokeWidth={2.5} className="text-[#333333] opacity-60" />
+              </button>
+            </div>
+            <p className="text-sm text-stone-600 mt-2">
+              Drag and drop to reorder your routines and habits
+            </p>
+          </div>
+
+          <div className="flex-1 overflow-y-auto p-6">
+            <div className="space-y-2">
+              {orderedItems.map((item, index) => (
+                <div
+                  key={`${item.type}-${item.id}`}
+                  draggable
+                  onDragStart={(e) => handleDragStart(e, item)}
+                  onDragOver={(e) => handleDragOver(e, item)}
+                  onDragLeave={handleDragLeave}
+                  onDrop={(e) => handleDrop(e, item)}
+                  onDragEnd={handleDragEnd}
+                  className={`flex items-center gap-3 p-3 rounded-lg border-2 transition-all cursor-move ${
+                    draggedOverItem?.id === item.id 
+                      ? 'border-[#333333] bg-stone-50' 
+                      : 'border-stone-200 hover:border-stone-300'
+                  }`}
+                >
+                  <GripVertical 
+                    size={20} 
+                    strokeWidth={2.5} 
+                    className="text-stone-400 flex-shrink-0" 
+                  />
+                  <div className="flex-1 min-w-0">
+                    <div className="font-medium text-[#333333] truncate">
+                      {item.name}
+                    </div>
+                    <div className="text-xs text-stone-500 uppercase tracking-wide">
+                      {item.type === 'routine' ? 'Routine' : 'Single Habit'}
+                    </div>
+                  </div>
+                  <div className="text-xs text-stone-400 font-mono">
+                    {index + 1}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="p-6 border-t border-stone-200">
+            <div className="flex gap-2">
+              <button
+                onClick={onClose}
+                className="flex-1 px-4 py-2.5 border-2 border-[#333333] text-[#333333] rounded-lg hover:bg-stone-100 font-bold uppercase text-sm tracking-wider transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSave}
+                className="flex-1 px-4 py-2.5 bg-black text-white rounded-lg hover:bg-[#333333] font-bold uppercase text-sm tracking-wider shadow-lg transition-all hover:shadow-xl hover:scale-105"
+              >
+                Save Order
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  // Add Choice Modal
+  const AddChoiceModal = ({ onClose }) => {
+    const handleRoutineChoice = () => {
+      onClose();
+      setShowAddRoutineModal(true);
+    };
+
+    const handleHabitChoice = () => {
+      onClose();
+      setShowAddSingleHabitModal(true);
+    };
+
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm">
+          <div className="p-6 border-b border-stone-200">
+            <div className="flex items-center justify-between">
+              <h2 className="text-xl font-bold text-[#333333] uppercase tracking-wide">
+                Add New Item
+              </h2>
+              <button
+                onClick={onClose}
+                className="p-2 hover:bg-stone-100 rounded-lg transition-colors"
+              >
+                <X size={20} strokeWidth={2.5} className="text-[#333333] opacity-60" />
+              </button>
+            </div>
+            <p className="text-sm text-stone-600 mt-2">
+              Choose what you'd like to add
+            </p>
+          </div>
+
+          <div className="p-6">
+            <div className="space-y-3">
+              <button
+                onClick={handleRoutineChoice}
+                disabled={routines.length >= 5}
+                className="w-full flex items-center gap-3 p-4 rounded-lg border-2 border-green-200 bg-green-50 hover:bg-green-100 hover:border-green-300 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-green-50 disabled:hover:border-green-200"
+              >
+                <div className="w-10 h-10 bg-green-500 rounded-lg flex items-center justify-center">
+                  <Calendar size={20} strokeWidth={2.5} className="text-white" />
+                </div>
+                <div className="flex-1 text-left">
+                  <div className="font-bold text-[#333333] uppercase tracking-wide">
+                    Add Routine
+                  </div>
+                  <div className="text-sm text-stone-600">
+                    {routines.length >= 5 ? 'Maximum 5 routines reached' : 'Create a new routine with multiple habits'}
+                  </div>
+                </div>
+                <ChevronRight size={20} strokeWidth={2.5} className="text-[#333333] opacity-60" />
+              </button>
+
+              <button
+                onClick={handleHabitChoice}
+                className="w-full flex items-center gap-3 p-4 rounded-lg border-2 border-blue-200 bg-blue-50 hover:bg-blue-100 hover:border-blue-300 transition-all"
+              >
+                <div className="w-10 h-10 bg-blue-500 rounded-lg flex items-center justify-center">
+                  <CheckSquare size={20} strokeWidth={2.5} className="text-white" />
+                </div>
+                <div className="flex-1 text-left">
+                  <div className="font-bold text-[#333333] uppercase tracking-wide">
+                    Add Single Habit
+                  </div>
+                  <div className="text-sm text-stone-600">
+                    Create a standalone habit outside of routines
+                  </div>
+                </div>
+                <ChevronRight size={20} strokeWidth={2.5} className="text-[#333333] opacity-60" />
+              </button>
+            </div>
+          </div>
+
+          <div className="p-6 border-t border-stone-200">
+            <button
+              onClick={onClose}
+              className="w-full px-4 py-2.5 border-2 border-[#333333] text-[#333333] rounded-lg hover:bg-stone-100 font-bold uppercase text-sm tracking-wider transition-colors"
+            >
+              Cancel
             </button>
           </div>
         </div>
@@ -2409,6 +3054,170 @@ const HabitGoalTracker = () => {
     setTodos(newTodos);
     await dataService.updateTodos(newTodos);
   };
+
+  // New functions for routine and single habit management
+  const addRoutine = async (routineData) => {
+    try {
+      const newRoutine = await dataService.addRoutine(routineData);
+      setRoutines(prev => [...prev, newRoutine]);
+      return newRoutine;
+    } catch (error) {
+      console.error('Error adding routine:', error);
+      alert(error.message);
+    }
+  };
+
+  const updateRoutine = async (routineId, routineData) => {
+    try {
+      const updatedRoutine = await dataService.updateRoutine(routineId, routineData);
+      setRoutines(prev => prev.map(r => r.id === routineId ? updatedRoutine : r));
+      return updatedRoutine;
+    } catch (error) {
+      console.error('Error updating routine:', error);
+      alert(error.message);
+    }
+  };
+
+  const deleteRoutine = async (routineId, keepHabitsAsSingles = false) => {
+    try {
+      await dataService.deleteRoutine(routineId, keepHabitsAsSingles);
+      setRoutines(prev => prev.filter(r => r.id !== routineId));
+      
+      if (keepHabitsAsSingles) {
+        // Reload habits to get updated data
+        const updatedHabits = await dataService.getHabits();
+        setHabits(updatedHabits);
+      } else {
+        // Remove habits that belonged to this routine
+        setHabits(prev => prev.filter(h => h.routineId !== routineId));
+      }
+      
+      return true;
+    } catch (error) {
+      console.error('Error deleting routine:', error);
+      alert(error.message);
+    }
+  };
+
+
+  const addSingleHabit = async (habitData) => {
+    try {
+      const newHabit = await dataService.addSingleHabit(habitData);
+      setHabits(prev => [...prev, newHabit]);
+      return newHabit;
+    } catch (error) {
+      console.error('Error adding single habit:', error);
+      alert(error.message);
+    }
+  };
+
+  const updateHabit = async (habitId, habitData) => {
+    try {
+      const updatedHabit = await dataService.updateHabit(habitId, habitData);
+      setHabits(prev => prev.map(h => h.id === habitId ? updatedHabit : h));
+      return updatedHabit;
+    } catch (error) {
+      console.error('Error updating habit:', error);
+      alert(error.message);
+    }
+  };
+
+  const deleteHabit = async (habitId) => {
+    try {
+      await dataService.deleteHabit(habitId);
+      setHabits(prev => prev.filter(h => h.id !== habitId));
+      return true;
+    } catch (error) {
+      console.error('Error deleting habit:', error);
+      alert(error.message);
+    }
+  };
+
+  const updateDashboardOrder = async (newOrder) => {
+    try {
+      setDashboardOrder(newOrder);
+      await dataService.updateDashboardOrder(newOrder);
+    } catch (error) {
+      console.error('Error updating dashboard order:', error);
+    }
+  };
+
+  // Get ordered dashboard items
+  const getOrderedDashboardItems = () => {
+    const singleHabits = habits.filter(h => h.routineId === null);
+    const allItems = [
+      ...routines.map(r => ({ type: 'routine', id: r.id, data: r })),
+      ...singleHabits.map(h => ({ type: 'habit', id: h.id, data: h }))
+    ];
+
+    // If no custom order exists, use default order
+    if (dashboardOrder.length === 0) {
+      return allItems.sort((a, b) => {
+        if (a.type === 'routine' && b.type === 'habit') return -1;
+        if (a.type === 'habit' && b.type === 'routine') return 1;
+        return a.data.order - b.data.order;
+      });
+    }
+
+    // Sort by custom order, but filter out any dashboardOrder items that no longer exist
+    const validDashboardOrder = dashboardOrder.filter(orderItem => 
+      orderItem && orderItem.type && orderItem.id && 
+      allItems.some(item => item.type === orderItem.type && item.id === orderItem.id)
+    );
+
+    return allItems.sort((a, b) => {
+      const aOrder = validDashboardOrder.find(item => item.type === a.type && item.id === a.id)?.order ?? 999;
+      const bOrder = validDashboardOrder.find(item => item.type === b.type && item.id === b.id)?.order ?? 999;
+      return aOrder - bOrder;
+    });
+  };
+
+  // Initialize dashboard order if empty
+  const initializeDashboardOrder = async () => {
+    if (dashboardOrder.length === 0) {
+      const singleHabits = habits.filter(h => h.routineId === null);
+      const allItems = [
+        ...routines.map(r => ({ type: 'routine', id: r.id, order: r.order })),
+        ...singleHabits.map(h => ({ type: 'habit', id: h.id, order: 999 }))
+      ];
+      
+      // Sort by default order (routines first, then habits)
+      allItems.sort((a, b) => {
+        if (a.type === 'routine' && b.type === 'habit') return -1;
+        if (a.type === 'habit' && b.type === 'routine') return 1;
+        return a.order - b.order;
+      });
+      
+      // Assign new order values
+      const newOrder = allItems.map((item, index) => ({
+        type: item.type,
+        id: item.id,
+        order: index
+      }));
+      
+      await updateDashboardOrder(newOrder);
+    } else {
+      // Clean up any invalid items in existing dashboard order
+      const singleHabits = habits.filter(h => h.routineId === null);
+      const validItems = [
+        ...routines.map(r => ({ type: 'routine', id: r.id })),
+        ...singleHabits.map(h => ({ type: 'habit', id: h.id }))
+      ];
+      
+      const cleanedOrder = dashboardOrder.filter(orderItem => 
+        orderItem && 
+        orderItem.type && 
+        orderItem.id && 
+        validItems.some(item => item.type === orderItem.type && item.id === orderItem.id)
+      );
+      
+      if (cleanedOrder.length !== dashboardOrder.length) {
+        setDashboardOrder(cleanedOrder);
+        await dataService.updateDashboardOrder(cleanedOrder);
+      }
+    }
+  };
+
   
   // Toggle todo completion
   const toggleTodoCompletion = async (todoId) => {
@@ -2470,24 +3279,13 @@ const HabitGoalTracker = () => {
   
   // Dashboard View
   const DashboardView = () => {
-    const nextRoutine = getNextRoutine();
     const activeGoal = getActiveGoal();
     const todaysTodos = todos.filter(t => t.addedAt === getTodayString());
     const weeklyFocus = getWeeklyFocus();
+    const orderedItems = getOrderedDashboardItems();
     
     return (
       <div className="space-y-4">
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <h2 className="text-2xl font-bold text-[#333333] uppercase tracking-wide">Dashboard</h2>
-          <button
-            onClick={() => setShowSettings(true)}
-            className="p-2 hover:bg-stone-100 rounded-lg transition-colors"
-            title="Settings"
-          >
-            <Settings size={20} strokeWidth={2.5} className="text-[#333333] opacity-60" />
-          </button>
-        </div>
         
         {/* Date Display */}
         <div className="bg-white rounded-xl shadow-md p-4">
@@ -2501,6 +3299,7 @@ const HabitGoalTracker = () => {
             </p>
           )}
         </div>
+        
         {/* Daily Quote */}
         <div className="bg-white rounded-xl shadow-md p-6">
           <p className="text-base leading-relaxed text-[#333333] font-serif italic">"{getDailyQuote()}"</p>
@@ -2513,202 +3312,308 @@ const HabitGoalTracker = () => {
           <p className="text-sm text-[#333333]">{weeklyFocus.focus}</p>
         </div>
         
-        {/* All Daily Routines */}
-        {getAllDayRoutines().map(routine => {
-          const isExpanded = expandedRoutines.has(routine.id);
-          const stats = getRoutineCompletionStats(routine.id);
-          
-          return (
-            <div key={routine.id} className="bg-white rounded-xl shadow-md">
-              {/* Clickable Header */}
-              <div 
-                className="p-4 cursor-pointer flex items-center justify-between hover:bg-stone-50 transition-colors"
-                onClick={() => toggleRoutineExpanded(routine.id)}
-              >
-                <div className="flex items-center gap-3">
-                  <h3 className="font-bold text-[#333333] text-lg uppercase tracking-wide">{routine.name}</h3>
-                  {stats.completed && (
-                    <span className="text-sm text-stone-600 font-mono">
-                      {Math.round(stats.totalTime * 10) / 10}m total
+        {/* Ordered Dashboard Items */}
+        {orderedItems.map((item, index) => {
+          if (item.type === 'routine') {
+            const routine = item.data;
+            const isExpanded = expandedRoutines.has(routine.id);
+            const stats = getRoutineCompletionStats(routine.id);
+            
+            return (
+              <div key={routine.id} className="bg-white rounded-xl shadow-md">
+                {/* Clickable Header */}
+                <div 
+                  className="p-4 cursor-pointer flex items-center justify-between hover:bg-stone-50 transition-colors"
+                  onClick={() => toggleRoutineExpanded(routine.id)}
+                >
+                  <div className="flex items-center gap-3">
+                    <h3 className="font-bold text-[#333333] text-lg uppercase tracking-wide">{routine.name}</h3>
+                    {stats.completed && (
+                      <span className="text-sm text-stone-600 font-mono">
+                        {Math.round(stats.totalTime * 10) / 10}m total
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className={`text-sm font-mono px-2 py-1 rounded ${
+                      stats.completed 
+                        ? 'bg-green-200 text-green-800' 
+                        : stats.percentage > 0 
+                          ? 'bg-blue-200 text-blue-800' 
+                          : 'bg-stone-200 text-stone-600'
+                    }`}>
+                      {stats.percentage}%
                     </span>
-                  )}
+                    <ChevronRight 
+                      size={20} 
+                      strokeWidth={2.5} 
+                      className={`text-[#333333] transition-transform ${isExpanded ? 'rotate-90' : ''}`} 
+                    />
+                  </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <span className={`text-sm font-mono px-2 py-1 rounded ${
-                    stats.completed 
-                      ? 'bg-green-200 text-green-800' 
-                      : stats.percentage > 0 
-                        ? 'bg-blue-200 text-blue-800' 
-                        : 'bg-stone-200 text-stone-600'
-                  }`}>
-                    {stats.percentage}%
-                  </span>
-                  <ChevronRight 
-                    size={20} 
-                    strokeWidth={2.5} 
-                    className={`text-[#333333] transition-transform ${isExpanded ? 'rotate-90' : ''}`} 
-                  />
-                </div>
-              </div>
-              
-              {/* Expandable Content */}
-              {isExpanded && (
-                <div className="px-4 pb-4">
-                  <div className="space-y-2">
-                    {routine.habits.map(habitId => {
-                      const habit = habits.find(h => h.id === habitId);
-                      if (!habit) return null;
-                      const isComplete = habitCompletions[getTodayString()]?.[habitId] || false;
-                      const streak = getHabitStreak(habitId);
-                      
-                      return (
-                        <div
-                          key={habitId}
-                          className="flex items-center justify-between p-3 bg-stone-50 rounded-lg cursor-pointer hover:bg-stone-100 transition-colors"
-                          onClick={() => toggleHabitCompletion(habitId)}
-                        >
-                          <div className="flex items-center gap-3">
-                            {isComplete ? (
-                              <CheckSquare className="text-[#333333]" size={20} strokeWidth={2.5} />
-                            ) : (
-                              <Circle className="text-[#333333] opacity-40" size={20} strokeWidth={2.5} />
-                            )}
-                            <div className="flex flex-col">
-                              <span className={isComplete ? "line-through text-[#333333] opacity-50" : "text-[#333333] font-medium"}>
-                                {habit.name}
-                              </span>
-                              {isComplete && habitCompletionTimes[getTodayString()]?.[habitId] && (
-                                <span className="text-xs text-green-600 font-mono">
-                                  Completed in {Math.round(habitCompletionTimes[getTodayString()][habitId] * 10) / 10}m
-                                </span>
+                
+                
+                {/* Expandable Content */}
+                {isExpanded && (
+                  <div className="px-4 pb-4">
+                    <div className="space-y-2">
+                      {routine.habits.map(habitId => {
+                        const habit = habits.find(h => h.id === habitId);
+                        if (!habit) return null;
+                        const isComplete = habitCompletions[getTodayString()]?.[habitId] || false;
+                        const streak = getHabitStreak(habitId);
+                        
+                        return (
+                          <div
+                            key={habitId}
+                            className="flex items-center justify-between p-3 bg-stone-50 rounded-lg cursor-pointer hover:bg-stone-100 transition-colors"
+                            onClick={() => toggleHabitCompletion(habitId)}
+                          >
+                            <div className="flex items-center gap-3">
+                              {isComplete ? (
+                                <CheckSquare className="text-[#333333]" size={20} strokeWidth={2.5} />
+                              ) : (
+                                <Circle className="text-[#333333] opacity-40" size={20} strokeWidth={2.5} />
                               )}
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            {streak > 0 && (
-                              <span className="text-xs bg-[#333333] text-white px-2 py-1 font-mono font-bold rounded">
-                                {streak}D
-                              </span>
-                            )}
-                            {/* Only show timer controls when in active routine */}
-                            {activeRoutine && (habit.duration || habit.expectedCompletionTime || activeTimers[habit.id]) && (
-                              <div className="flex items-center gap-1">
-                                {activeTimers[habit.id] ? (
-                                  <>
-                                    {habit.duration ? (
-                                      <span className="text-xs bg-blue-500 text-white px-2 py-1 font-mono rounded">
-                                        {getTimerTimeRemaining(habit.id)}m
-                                      </span>
-                                    ) : (
-                                      <span className="text-xs bg-green-500 text-white px-2 py-1 font-mono rounded">
-                                        {Math.floor((Date.now() - activeTimers[habit.id]) / 1000 / 60)}m
-                                      </span>
-                                    )}
-                                    <button
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        stopTimer(habit.id, true);
-                                        toggleHabitCompletion(habit.id);
-                                      }}
-                                      className="p-1 hover:bg-green-100 rounded transition-colors"
-                                      title="Complete Habit"
-                                    >
-                                      <Check size={14} strokeWidth={2.5} className="text-green-600" />
-                                    </button>
-                                    <button
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        stopTimer(habit.id, false);
-                                      }}
-                                      className="p-1 hover:bg-red-100 rounded transition-colors"
-                                      title="Stop Timer"
-                                    >
-                                      <X size={14} strokeWidth={2.5} className="text-red-600" />
-                                    </button>
-                                  </>
-                                ) : habit.duration ? (
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      startTimer(habit.id, habit.duration);
-                                    }}
-                                    className="p-1 hover:bg-green-100 rounded transition-colors"
-                                    title="Start Timer"
-                                  >
-                                    <div className="w-3 h-3 bg-green-500 rounded-full"></div>
-                                  </button>
-                                ) : habit.expectedCompletionTime ? (
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      startUncappedTimer(habit.id);
-                                    }}
-                                    className="p-1 hover:bg-green-100 rounded transition-colors"
-                                    title="Start Timer"
-                                  >
-                                    <div className="w-3 h-3 bg-green-500 rounded-full"></div>
-                                  </button>
-                                ) : null}
-                                {getAverageCompletionTime(habit.id) && (
-                                  <span className="text-xs bg-stone-200 text-[#333333] px-2 py-1 font-mono rounded">
-                                    Avg: {getAverageCompletionTime(habit.id)}m
+                              <div className="flex flex-col">
+                                <span className={isComplete ? "line-through text-[#333333] opacity-50" : "text-[#333333] font-medium"}>
+                                  {habit.name}
+                                </span>
+                                {isComplete && habitCompletionTimes[getTodayString()]?.[habitId] && (
+                                  <span className="text-xs text-green-600 font-mono">
+                                    Completed in {Math.round(habitCompletionTimes[getTodayString()][habitId] * 10) / 10}m
                                   </span>
                                 )}
                               </div>
-                            )}
-                            
-                            {/* Expected Time Progress Bar - only in routine */}
-                            {activeRoutine && activeTimers[habit.id] && habit.expectedCompletionTime && (
-                              <ExpectedTimeProgressBar habitId={habit.id} />
+                            </div>
+                            <div className="flex items-center gap-2">
+                              {streak > 0 && (
+                                <span className="text-xs bg-[#333333] text-white px-2 py-1 font-mono font-bold rounded">
+                                  {streak}D
+                                </span>
+                              )}
+                              {/* Only show timer controls when in active routine */}
+                              {activeRoutine && (habit.duration || habit.expectedCompletionTime || activeTimers[habit.id]) && (
+                                <div className="flex items-center gap-1">
+                                  {activeTimers[habit.id] ? (
+                                    <>
+                                      {habit.duration ? (
+                                        <span className="text-xs bg-blue-500 text-white px-2 py-1 font-mono rounded">
+                                          {getTimerTimeRemaining(habit.id)}m
+                                        </span>
+                                      ) : (
+                                        <span className="text-xs bg-green-500 text-white px-2 py-1 font-mono rounded">
+                                          {Math.floor((Date.now() - activeTimers[habit.id]) / 1000 / 60)}m
+                                        </span>
+                                      )}
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          stopTimer(habit.id, true);
+                                          toggleHabitCompletion(habit.id);
+                                        }}
+                                        className="p-1 hover:bg-green-100 rounded transition-colors"
+                                        title="Complete Habit"
+                                      >
+                                        <Check size={14} strokeWidth={2.5} className="text-green-600" />
+                                      </button>
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          stopTimer(habit.id, false);
+                                        }}
+                                        className="p-1 hover:bg-red-100 rounded transition-colors"
+                                        title="Stop Timer"
+                                      >
+                                        <X size={14} strokeWidth={2.5} className="text-red-600" />
+                                      </button>
+                                    </>
+                                  ) : habit.duration ? (
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        startTimer(habit.id, habit.duration);
+                                      }}
+                                      className="p-1 hover:bg-green-100 rounded transition-colors"
+                                      title="Start Timer"
+                                    >
+                                      <div className="w-3 h-3 bg-green-500 rounded-full"></div>
+                                    </button>
+                                  ) : habit.expectedCompletionTime ? (
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        startUncappedTimer(habit.id);
+                                      }}
+                                      className="p-1 hover:bg-green-100 rounded transition-colors"
+                                      title="Start Timer"
+                                    >
+                                      <div className="w-3 h-3 bg-green-500 rounded-full"></div>
+                                    </button>
+                                  ) : null}
+                                  {getAverageCompletionTime(habit.id) && (
+                                    <span className="text-xs bg-stone-200 text-[#333333] px-2 py-1 font-mono rounded">
+                                      Avg: {getAverageCompletionTime(habit.id)}m
+                                    </span>
+                                  )}
+                                </div>
+                              )}
+                              
+                              {/* Expected Time Progress Bar - only in routine */}
+                              {activeRoutine && activeTimers[habit.id] && habit.expectedCompletionTime && (
+                                <ExpectedTimeProgressBar habitId={habit.id} />
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                      {routine.habits.length === 0 && (
+                        <p className="text-[#333333] opacity-50 text-sm">No habits in this routine yet.</p>
+                      )}
+                    </div>
+                    
+                    {/* Routine Completion Info */}
+                    {(() => {
+                      const today = getTodayString();
+                      const routineCompletion = routineCompletions[today]?.[routine.id];
+                      if (routineCompletion && routineCompletion.completed) {
+                        return (
+                          <div className="mt-3 p-3 bg-green-50 border border-green-200 rounded-lg">
+                            <div className="flex items-center justify-between">
+                              <span className="text-sm font-medium text-green-800">Routine Completed Today</span>
+                              <span className="text-sm font-mono text-green-600">
+                                {Math.round(routineCompletion.totalTime * 10) / 10}m total
+                              </span>
+                            </div>
+                            {routineCompletion.startTime && routineCompletion.endTime && (
+                              <div className="text-xs text-green-600 mt-1">
+                                {new Date(routineCompletion.startTime).toLocaleTimeString()} - {new Date(routineCompletion.endTime).toLocaleTimeString()}
+                              </div>
                             )}
                           </div>
-                        </div>
-                      );
-                    })}
-                    {routine.habits.length === 0 && (
-                      <p className="text-[#333333] opacity-50 text-sm">No habits in this routine yet.</p>
+                        );
+                      }
+                      return null;
+                    })()}
+                    
+                    {/* Start Routine Button */}
+                    {routine.habits.length > 0 && !stats.completed && (
+                      <button
+                        onClick={() => startRoutine(routine.id)}
+                        disabled={activeRoutine !== null}
+                        className="mt-4 w-full flex items-center justify-center gap-2 bg-green-500 text-white py-3 rounded-lg hover:bg-green-600 font-bold uppercase text-sm tracking-wider shadow-lg transition-all hover:shadow-xl hover:scale-[1.02] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
+                      >
+                        <Play size={20} strokeWidth={2.5} />
+                        {activeRoutine ? 'Routine In Progress' : 'Start Routine'}
+                      </button>
                     )}
                   </div>
-                  
-                  {/* Routine Completion Info */}
-                  {(() => {
-                    const today = getTodayString();
-                    const routineCompletion = routineCompletions[today]?.[routine.id];
-                    if (routineCompletion && routineCompletion.completed) {
-                      return (
-                        <div className="mt-3 p-3 bg-green-50 border border-green-200 rounded-lg">
-                          <div className="flex items-center justify-between">
-                            <span className="text-sm font-medium text-green-800">Routine Completed Today</span>
-                            <span className="text-sm font-mono text-green-600">
-                              {Math.round(routineCompletion.totalTime * 10) / 10}m total
-                            </span>
-                          </div>
-                          {routineCompletion.startTime && routineCompletion.endTime && (
-                            <div className="text-xs text-green-600 mt-1">
-                              {new Date(routineCompletion.startTime).toLocaleTimeString()} - {new Date(routineCompletion.endTime).toLocaleTimeString()}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    }
-                    return null;
-                  })()}
-                  
-                  {/* Start Routine Button */}
-                  {routine.habits.length > 0 && !stats.completed && (
-                    <button
-                      onClick={() => startRoutine(routine.id)}
-                      disabled={activeRoutine !== null}
-                      className="mt-4 w-full flex items-center justify-center gap-2 bg-green-500 text-white py-3 rounded-lg hover:bg-green-600 font-bold uppercase text-sm tracking-wider shadow-lg transition-all hover:shadow-xl hover:scale-[1.02] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
+                )}
+              </div>
+            );
+          } else if (item.type === 'habit') {
+            const habit = item.data;
+            const isComplete = habitCompletions[getTodayString()]?.[habit.id] || false;
+            const streak = getHabitStreak(habit.id);
+            
+            return (
+              <div key={habit.id} className="bg-white rounded-xl shadow-md p-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div
+                      className="cursor-pointer"
+                      onClick={() => toggleHabitCompletion(habit.id)}
                     >
-                      <Play size={20} strokeWidth={2.5} />
-                      {activeRoutine ? 'Routine In Progress' : 'Start Routine'}
-                    </button>
-                  )}
+                      {isComplete ? (
+                        <CheckSquare className="text-[#333333]" size={24} strokeWidth={2.5} />
+                      ) : (
+                        <Circle className="text-[#333333] opacity-40" size={24} strokeWidth={2.5} />
+                      )}
+                    </div>
+                    <div className="flex flex-col">
+                      <h3 className={`font-bold text-lg uppercase tracking-wide ${
+                        isComplete ? "line-through opacity-50" : "text-[#333333]"
+                      }`}>
+                        {habit.name}
+                      </h3>
+                      {habit.description && (
+                        <p className="text-sm text-[#333333] opacity-70">{habit.description}</p>
+                      )}
+                      {isComplete && habitCompletionTimes[getTodayString()]?.[habit.id] && (
+                        <span className="text-xs text-green-600 font-mono">
+                          Completed in {Math.round(habitCompletionTimes[getTodayString()][habit.id] * 10) / 10}m
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {streak > 0 && (
+                      <span className="text-xs bg-[#333333] text-white px-2 py-1 font-mono font-bold rounded">
+                        {streak}D
+                      </span>
+                    )}
+                    {habit.trackingType === 'timed' && !activeRoutine && (
+                      <div className="flex items-center gap-1">
+                        {activeTimers[habit.id] ? (
+                          <>
+                            {habit.duration ? (
+                              <span className="text-xs bg-blue-500 text-white px-2 py-1 font-mono rounded">
+                                {getTimerTimeRemaining(habit.id)}m
+                              </span>
+                            ) : (
+                              <span className="text-xs bg-green-500 text-white px-2 py-1 font-mono rounded">
+                                {Math.floor((Date.now() - activeTimers[habit.id]) / 1000 / 60)}m
+                              </span>
+                            )}
+                            <button
+                              onClick={() => {
+                                stopTimer(habit.id, true);
+                                toggleHabitCompletion(habit.id);
+                              }}
+                              className="p-1 hover:bg-green-100 rounded transition-colors"
+                              title="Complete Habit"
+                            >
+                              <Check size={14} strokeWidth={2.5} className="text-green-600" />
+                            </button>
+                            <button
+                              onClick={() => stopTimer(habit.id, false)}
+                              className="p-1 hover:bg-red-100 rounded transition-colors"
+                              title="Stop Timer"
+                            >
+                              <X size={14} strokeWidth={2.5} className="text-red-600" />
+                            </button>
+                          </>
+                        ) : habit.duration ? (
+                          <button
+                            onClick={() => startTimer(habit.id, habit.duration)}
+                            className="p-1 hover:bg-green-100 rounded transition-colors"
+                            title="Start Timer"
+                          >
+                            <div className="w-3 h-3 bg-green-500 rounded-full"></div>
+                          </button>
+                        ) : habit.expectedCompletionTime ? (
+                          <button
+                            onClick={() => startUncappedTimer(habit.id)}
+                            className="p-1 hover:bg-green-100 rounded transition-colors"
+                            title="Start Timer"
+                          >
+                            <div className="w-3 h-3 bg-green-500 rounded-full"></div>
+                          </button>
+                        ) : null}
+                        {getAverageCompletionTime(habit.id) && (
+                          <span className="text-xs bg-stone-200 text-[#333333] px-2 py-1 font-mono rounded">
+                            Avg: {getAverageCompletionTime(habit.id)}m
+                          </span>
+                        )}
+                      </div>
+                    )}
+                    
+                  </div>
                 </div>
-              )}
-            </div>
-          );
+              </div>
+            );
+          }
+          return null;
         })}
         
         {/* Active Goal */}
@@ -2789,10 +3694,12 @@ const HabitGoalTracker = () => {
       return <HistoryView onClose={() => setShowHistory(false)} />;
     }
     
+    const singleHabits = habits.filter(h => h.routineId === null);
+    
     return (
       <div className="space-y-4">
         <div className="flex items-center justify-between">
-          <h2 className="text-2xl font-bold text-[#333333] uppercase tracking-wide">Routines</h2>
+          <h2 className="text-2xl font-bold text-[#333333] uppercase tracking-wide">Routines & Habits</h2>
           <div className="flex items-center gap-2">
             <button
               onClick={() => setShowSettings(true)}
@@ -2811,7 +3718,25 @@ const HabitGoalTracker = () => {
           </div>
         </div>
         
-        {routines.map(routine => (
+        {/* Management Buttons */}
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            onClick={() => setShowAddChoiceModal(true)}
+            className="flex items-center gap-2 bg-green-500 text-white px-4 py-2 rounded-lg hover:bg-green-600 font-bold uppercase text-sm tracking-wider shadow-lg transition-all hover:shadow-xl hover:scale-105"
+          >
+            <Plus size={18} strokeWidth={2.5} />
+            Add
+          </button>
+          <button
+            onClick={() => setShowOrderRoutinesModal(true)}
+            className="flex items-center gap-2 bg-black text-white px-4 py-2 rounded-lg hover:bg-[#333333] font-bold uppercase text-sm tracking-wider shadow-lg transition-all hover:shadow-xl hover:scale-105"
+          >
+            <GripVertical size={18} strokeWidth={2.5} />
+            Order Routines
+          </button>
+        </div>
+        
+        {routines.sort((a, b) => a.order - b.order).map((routine, index) => (
           <div key={routine.id} className="bg-white rounded-xl shadow-md p-4">
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-3">
@@ -2974,6 +3899,133 @@ const HabitGoalTracker = () => {
             )}
           </div>
         ))}
+        
+        {/* Single Habits Section */}
+        {singleHabits.length > 0 && (
+          <div className="bg-white rounded-xl shadow-md p-4">
+            <h3 className="font-bold text-[#333333] mb-4 text-lg uppercase tracking-wide">Single Habits</h3>
+            <div className="space-y-2">
+              {singleHabits.map(habit => {
+                const isComplete = habitCompletions[getTodayString()]?.[habit.id] || false;
+                const streak = getHabitStreak(habit.id);
+                
+                return (
+                  <div
+                    key={habit.id}
+                    className="flex items-center justify-between p-3 bg-stone-50 rounded-lg hover:bg-stone-100 transition-colors"
+                  >
+                    <div 
+                      className="flex-grow flex items-center gap-3 cursor-pointer"
+                      onClick={() => toggleHabitCompletion(habit.id)}
+                    >
+                      {isComplete ? (
+                        <CheckSquare className="text-[#333333]" size={20} strokeWidth={2.5} />
+                      ) : (
+                        <Circle className="text-[#333333] opacity-40" size={20} strokeWidth={2.5} />
+                      )}
+                      <div className="flex flex-col">
+                        <span className={isComplete ? "line-through text-[#333333] opacity-50" : "text-[#333333] font-medium"}>
+                          {habit.name}
+                        </span>
+                        {habit.description && (
+                          <span className="text-xs text-[#333333] opacity-70">{habit.description}</span>
+                        )}
+                        {isComplete && habitCompletionTimes[getTodayString()]?.[habit.id] && (
+                          <span className="text-xs text-green-600 font-mono">
+                            Completed in {Math.round(habitCompletionTimes[getTodayString()][habit.id] * 10) / 10}m
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {streak > 0 && (
+                        <span className="text-xs bg-[#333333] text-white px-2 py-1 font-mono font-bold rounded">
+                          {streak}D
+                        </span>
+                      )}
+                      {habit.trackingType === 'timed' && !activeRoutine && (
+                        <div className="flex items-center gap-1">
+                          {activeTimers[habit.id] ? (
+                            <>
+                              {habit.duration ? (
+                                <span className="text-xs bg-blue-500 text-white px-2 py-1 font-mono rounded">
+                                  {getTimerTimeRemaining(habit.id)}m
+                                </span>
+                              ) : (
+                                <span className="text-xs bg-green-500 text-white px-2 py-1 font-mono rounded">
+                                  {Math.floor((Date.now() - activeTimers[habit.id]) / 1000 / 60)}m
+                                </span>
+                              )}
+                              <button
+                                onClick={() => {
+                                  stopTimer(habit.id, true);
+                                  toggleHabitCompletion(habit.id);
+                                }}
+                                className="p-1 hover:bg-green-100 rounded transition-colors"
+                                title="Complete Habit"
+                              >
+                                <Check size={14} strokeWidth={2.5} className="text-green-600" />
+                              </button>
+                              <button
+                                onClick={() => stopTimer(habit.id, false)}
+                                className="p-1 hover:bg-red-100 rounded transition-colors"
+                                title="Stop Timer"
+                              >
+                                <X size={14} strokeWidth={2.5} className="text-red-600" />
+                              </button>
+                            </>
+                          ) : habit.duration ? (
+                            <button
+                              onClick={() => startTimer(habit.id, habit.duration)}
+                              className="p-1 hover:bg-green-100 rounded transition-colors"
+                              title="Start Timer"
+                            >
+                              <div className="w-3 h-3 bg-green-500 rounded-full"></div>
+                            </button>
+                          ) : habit.expectedCompletionTime ? (
+                            <button
+                              onClick={() => startUncappedTimer(habit.id)}
+                              className="p-1 hover:bg-green-100 rounded transition-colors"
+                              title="Start Timer"
+                            >
+                              <div className="w-3 h-3 bg-green-500 rounded-full"></div>
+                            </button>
+                          ) : null}
+                          {getAverageCompletionTime(habit.id) && (
+                            <span className="text-xs bg-stone-200 text-[#333333] px-2 py-1 font-mono rounded">
+                              Avg: {getAverageCompletionTime(habit.id)}m
+                            </span>
+                          )}
+                        </div>
+                      )}
+                      <button
+                        onClick={() => {
+                          setEditingHabit(habit);
+                          setShowHabitEditModal(true);
+                        }}
+                        className="p-1 hover:bg-stone-200 rounded transition-colors"
+                        title="Edit Habit"
+                      >
+                        <Edit2 size={16} strokeWidth={2.5} className="text-[#333333] opacity-60" />
+                      </button>
+                      <button
+                        onClick={() => {
+                          if (window.confirm('Are you sure you want to delete this habit?')) {
+                            deleteHabit(habit.id);
+                          }
+                        }}
+                        className="p-1 hover:bg-red-100 rounded transition-colors"
+                        title="Delete Habit"
+                      >
+                        <Trash2 size={16} strokeWidth={2.5} className="text-red-600" />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </div>
     );
   };
@@ -3856,6 +4908,40 @@ const HabitGoalTracker = () => {
         {showSettings && (
           <SettingsModal 
             onClose={() => setShowSettings(false)} 
+          />
+        )}
+
+        {showAddRoutineModal && (
+          <AddRoutineModal 
+            onClose={() => setShowAddRoutineModal(false)} 
+          />
+        )}
+
+        {showAddSingleHabitModal && (
+          <AddSingleHabitModal 
+            onClose={() => setShowAddSingleHabitModal(false)} 
+          />
+        )}
+
+        {showOrderRoutinesModal && (
+          <OrderRoutinesModal 
+            onClose={() => setShowOrderRoutinesModal(false)} 
+          />
+        )}
+
+        {showAddChoiceModal && (
+          <AddChoiceModal 
+            onClose={() => setShowAddChoiceModal(false)} 
+          />
+        )}
+
+        {showDeleteRoutineModal && routineToDelete && (
+          <DeleteRoutineModal 
+            routine={routineToDelete}
+            onClose={() => {
+              setShowDeleteRoutineModal(false);
+              setRoutineToDelete(null);
+            }} 
           />
         )}
 

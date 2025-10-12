@@ -72,21 +72,24 @@ class DataService {
               name: "Morning Routine",
               timeOfDay: "morning",
               days: ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"],
-              habits: []
+              habits: [],
+              order: 0
             },
             {
               id: 2,
               name: "Afternoon Routine",
               timeOfDay: "afternoon",
               days: ["monday", "tuesday", "wednesday", "thursday", "friday"],
-              habits: []
+              habits: [],
+              order: 1
             },
             {
               id: 3,
               name: "Evening Routine",
               timeOfDay: "evening",
               days: ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"],
-              habits: []
+              habits: [],
+              order: 2
             }
           ],
           habits: [],
@@ -95,7 +98,8 @@ class DataService {
           habitCompletions: {},
           habitCompletionTimes: {},
           routineCompletions: {},
-          lastResetDate: null
+          lastResetDate: null,
+          dashboardOrder: [] // Array of {type: 'routine'|'habit', id: number, order: number}
         }
       };
 
@@ -183,6 +187,11 @@ class DataService {
     return userData?.data?.settings || { timezone: "UTC" };
   }
 
+  async getDashboardOrder() {
+    const userData = await this.getCurrentUserData();
+    return userData?.data?.dashboardOrder || [];
+  }
+
   // Specific Data Setters
   async updateRoutines(routines) {
     const userData = await this.getCurrentUserData();
@@ -256,6 +265,14 @@ class DataService {
     await this.updateUserData(userData.data);
   }
 
+  async updateDashboardOrder(dashboardOrder) {
+    const userData = await this.getCurrentUserData();
+    if (!userData) throw new Error('No user data found');
+    
+    userData.data.dashboardOrder = dashboardOrder;
+    await this.updateUserData(userData.data);
+  }
+
   // Data Export/Import
   async exportUserData() {
     try {
@@ -302,21 +319,24 @@ class DataService {
           name: "Morning Routine",
           timeOfDay: "morning",
           days: ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"],
-          habits: []
+          habits: [],
+          order: 0
         },
         {
           id: 2,
           name: "Afternoon Routine",
           timeOfDay: "afternoon",
           days: ["monday", "tuesday", "wednesday", "thursday", "friday"],
-          habits: []
+          habits: [],
+          order: 1
         },
         {
           id: 3,
           name: "Evening Routine",
           timeOfDay: "evening",
           days: ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"],
-          habits: []
+          habits: [],
+          order: 2
         }
       ];
 
@@ -338,6 +358,12 @@ class DataService {
         };
         needsUpdate = true;
       }
+
+      // Ensure dashboardOrder exists
+      if (!userData.data.dashboardOrder) {
+        userData.data.dashboardOrder = [];
+        needsUpdate = true;
+      }
       
       if (needsUpdate) {
         await this.updateUserData(userData.data);
@@ -353,6 +379,145 @@ class DataService {
   // Utility Functions
   generateUserId() {
     return 'user_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+  }
+
+  // Routine CRUD Operations
+  async addRoutine(routineData) {
+    const userData = await this.getCurrentUserData();
+    if (!userData) throw new Error('No user data found');
+    
+    // Check routine limit (max 5)
+    if (userData.data.routines.length >= 5) {
+      throw new Error('Maximum of 5 routines allowed');
+    }
+    
+    // Generate new ID
+    const newId = Math.max(...userData.data.routines.map(r => r.id), 0) + 1;
+    
+    const newRoutine = {
+      id: newId,
+      name: routineData.name,
+      timeOfDay: routineData.timeOfDay || null,
+      days: routineData.days || [],
+      habits: [],
+      order: userData.data.routines.length
+    };
+    
+    userData.data.routines.push(newRoutine);
+    await this.updateUserData(userData.data);
+    return newRoutine;
+  }
+
+  async updateRoutine(routineId, routineData) {
+    const userData = await this.getCurrentUserData();
+    if (!userData) throw new Error('No user data found');
+    
+    const routineIndex = userData.data.routines.findIndex(r => r.id === routineId);
+    if (routineIndex === -1) throw new Error('Routine not found');
+    
+    userData.data.routines[routineIndex] = {
+      ...userData.data.routines[routineIndex],
+      ...routineData
+    };
+    
+    await this.updateUserData(userData.data);
+    return userData.data.routines[routineIndex];
+  }
+
+  async deleteRoutine(routineId, keepHabitsAsSingles = false) {
+    const userData = await this.getCurrentUserData();
+    if (!userData) throw new Error('No user data found');
+    
+    const routineIndex = userData.data.routines.findIndex(r => r.id === routineId);
+    if (routineIndex === -1) throw new Error('Routine not found');
+    
+    const routine = userData.data.routines[routineIndex];
+    
+    // Handle habits in the routine
+    if (keepHabitsAsSingles) {
+      // Convert routine habits to single habits
+      const routineHabits = userData.data.habits.filter(h => h.routineId === routineId);
+      routineHabits.forEach(habit => {
+        habit.routineId = null;
+        habit.trackingType = habit.trackingType || 'simple'; // Default to simple if not set
+      });
+    } else {
+      // Delete habits that belong to this routine
+      userData.data.habits = userData.data.habits.filter(h => h.routineId !== routineId);
+    }
+    
+    // Remove routine
+    userData.data.routines.splice(routineIndex, 1);
+    
+    // Reorder remaining routines
+    userData.data.routines.forEach((r, index) => {
+      r.order = index;
+    });
+    
+    await this.updateUserData(userData.data);
+    return true;
+  }
+
+  async addSingleHabit(habitData) {
+    const userData = await this.getCurrentUserData();
+    if (!userData) throw new Error('No user data found');
+    
+    const newId = Math.max(...userData.data.habits.map(h => h.id), 0) + 1;
+    
+    const newHabit = {
+      id: newId,
+      name: habitData.name,
+      description: habitData.description || '',
+      routineId: null, // Single habit
+      trackingType: habitData.trackingType || 'simple',
+      duration: habitData.duration || null,
+      expectedCompletionTime: habitData.expectedCompletionTime || null,
+      createdAt: new Date().toISOString()
+    };
+    
+    userData.data.habits.push(newHabit);
+    await this.updateUserData(userData.data);
+    return newHabit;
+  }
+
+  async updateHabit(habitId, habitData) {
+    const userData = await this.getCurrentUserData();
+    if (!userData) throw new Error('No user data found');
+    
+    const habitIndex = userData.data.habits.findIndex(h => h.id === habitId);
+    if (habitIndex === -1) throw new Error('Habit not found');
+    
+    userData.data.habits[habitIndex] = {
+      ...userData.data.habits[habitIndex],
+      ...habitData
+    };
+    
+    await this.updateUserData(userData.data);
+    return userData.data.habits[habitIndex];
+  }
+
+  async deleteHabit(habitId) {
+    const userData = await this.getCurrentUserData();
+    if (!userData) throw new Error('No user data found');
+    
+    const habitIndex = userData.data.habits.findIndex(h => h.id === habitId);
+    if (habitIndex === -1) throw new Error('Habit not found');
+    
+    const habit = userData.data.habits[habitIndex];
+    
+    // If it's a routine habit, remove it from the routine
+    if (habit.routineId) {
+      const routine = userData.data.routines.find(r => r.id === habit.routineId);
+      if (routine) {
+        routine.habits = routine.habits.filter(hId => hId !== habitId);
+      }
+    }
+    
+    // Remove habit
+    userData.data.habits.splice(habitIndex, 1);
+    
+    await this.updateUserData(userData.data);
+    return true;
   }
 
   // Clear all data (for testing/reset) - Note: This only clears local state, not Firestore
