@@ -95,10 +95,7 @@ class DataService {
           habits: [],
           goals: [],
           todos: [],
-          habitCompletions: {},
-          habitCompletionTimes: {},
-          routineCompletions: {},
-          lastResetDate: null,
+          dailyData: {}, // { "2024-01-15": { habits: {}, routines: {}, todos: [] } }
           dashboardOrder: [] // Array of {type: 'routine'|'habit', id: number, order: number}
         }
       };
@@ -162,24 +159,55 @@ class DataService {
     return userData?.data?.todos || [];
   }
 
-  async getHabitCompletions() {
+  // Get today's daily data (habits, routines, todos)
+  async getTodayData(todayString) {
     const userData = await this.getCurrentUserData();
-    return userData?.data?.habitCompletions || {};
+    return userData?.data?.dailyData?.[todayString] || null;
+  }
+
+  // Get daily data for a specific date
+  async getDailyData(dateString) {
+    const userData = await this.getCurrentUserData();
+    return userData?.data?.dailyData?.[dateString] || null;
+  }
+
+  // Create or update daily data
+  async updateDailyData(dateString, dailyData) {
+    const userData = await this.getCurrentUserData();
+    if (!userData) throw new Error('No user data found');
+    
+    if (!userData.data.dailyData) {
+      userData.data.dailyData = {};
+    }
+    
+    userData.data.dailyData[dateString] = dailyData;
+    await this.updateUserData(userData.data);
+  }
+
+  // Get today's date string in user's timezone
+  getTodayString() {
+    const now = new Date();
+    // Use UTC for now - timezone handling should be done in the component
+    return now.toISOString().split('T')[0];
+  }
+
+  // Legacy methods for backward compatibility (will be removed)
+  async getHabitCompletions() {
+    const today = this.getTodayString();
+    const todayData = await this.getTodayData(today);
+    return todayData?.habits || {};
   }
 
   async getHabitCompletionTimes() {
-    const userData = await this.getCurrentUserData();
-    return userData?.data?.habitCompletionTimes || {};
+    const today = this.getTodayString();
+    const todayData = await this.getTodayData(today);
+    return todayData?.habitCompletionTimes || {};
   }
 
   async getRoutineCompletions() {
-    const userData = await this.getCurrentUserData();
-    return userData?.data?.routineCompletions || {};
-  }
-
-  async getLastResetDate() {
-    const userData = await this.getCurrentUserData();
-    return userData?.data?.lastResetDate || null;
+    const today = this.getTodayString();
+    const todayData = await this.getTodayData(today);
+    return todayData?.routines || {};
   }
 
   async getUserSettings() {
@@ -225,36 +253,62 @@ class DataService {
     await this.updateUserData(userData.data);
   }
 
-  async updateHabitCompletions(habitCompletions) {
-    const userData = await this.getCurrentUserData();
-    if (!userData) throw new Error('No user data found');
-    
-    userData.data.habitCompletions = habitCompletions;
-    await this.updateUserData(userData.data);
+  // Update today's habit completions
+  async updateTodayHabits(habits, todayString) {
+    const todayData = await this.getTodayData(todayString) || { habits: {}, routines: {}, todos: [] };
+    todayData.habits = habits;
+    await this.updateDailyData(todayString, todayData);
   }
 
-  async updateHabitCompletionTimes(habitCompletionTimes) {
-    const userData = await this.getCurrentUserData();
-    if (!userData) throw new Error('No user data found');
-    
-    userData.data.habitCompletionTimes = habitCompletionTimes;
-    await this.updateUserData(userData.data);
+  // Update today's habit completion times
+  async updateTodayHabitTimes(habitTimes, todayString) {
+    const todayData = await this.getTodayData(todayString) || { habits: {}, routines: {}, todos: [] };
+    todayData.habitCompletionTimes = habitTimes;
+    await this.updateDailyData(todayString, todayData);
   }
 
-  async updateRoutineCompletions(routineCompletions) {
-    const userData = await this.getCurrentUserData();
-    if (!userData) throw new Error('No user data found');
-    
-    userData.data.routineCompletions = routineCompletions;
-    await this.updateUserData(userData.data);
+  // Update today's routine completions
+  async updateTodayRoutines(routines, todayString) {
+    const todayData = await this.getTodayData(todayString) || { habits: {}, routines: {}, todos: [] };
+    todayData.routines = routines;
+    await this.updateDailyData(todayString, todayData);
   }
 
-  async updateLastResetDate(dateString) {
-    const userData = await this.getCurrentUserData();
-    if (!userData) throw new Error('No user data found');
+  // Update today's todos
+  async updateTodayTodos(todos, todayString) {
+    const todayData = await this.getTodayData(todayString) || { habits: {}, routines: {}, todos: [] };
+    todayData.todos = todos;
+    await this.updateDailyData(todayString, todayData);
+  }
+
+  // Initialize today's data if it doesn't exist
+  async initializeTodayData(habits, routines, todayString) {
+    const todayData = await this.getTodayData(todayString);
     
-    userData.data.lastResetDate = dateString;
-    await this.updateUserData(userData.data);
+    if (!todayData) {
+      // Create fresh daily data with all habits/routines marked as incomplete
+      const newDailyData = {
+        habits: {},
+        routines: {},
+        todos: [],
+        habitCompletionTimes: {}
+      };
+      
+      // Initialize all habits as incomplete
+      habits.forEach(habit => {
+        newDailyData.habits[habit.id] = false;
+      });
+      
+      // Initialize all routines as incomplete
+      routines.forEach(routine => {
+        newDailyData.routines[routine.id] = false;
+      });
+      
+      await this.updateDailyData(todayString, newDailyData);
+      return newDailyData;
+    }
+    
+    return todayData;
   }
 
   async updateUserSettings(settings) {

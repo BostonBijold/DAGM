@@ -6,7 +6,6 @@ import authService from '../services/authService';
 const HabitGoalTracker = () => {
   const [currentView, setCurrentView] = useState('dashboard');
   const [showRoutineView, setShowRoutineView] = useState(false);
-  const [currentDate, setCurrentDate] = useState(new Date());
   const [showGoalModal, setShowGoalModal] = useState(false);
   const [showTaskModal, setShowTaskModal] = useState(false);
   const [selectedGoalForTask, setSelectedGoalForTask] = useState(null);
@@ -80,7 +79,8 @@ const HabitGoalTracker = () => {
         if (user) {
           setCurrentUser(user);
           await loadUserData();
-          checkAndResetDailyHabits();
+          // Initialize today's data after loading user data
+          await initializeTodayData();
         }
       } catch (error) {
         console.error('Error initializing app:', error);
@@ -146,68 +146,28 @@ const HabitGoalTracker = () => {
         setExpandedRoutines(new Set([nextRoutine.id]));
       }
     }
-  }, [routines, habitCompletions, currentDate]);
+  }, [routines, habitCompletions]);
 
-  // Periodic check for midnight reset (every minute)
-  useEffect(() => {
-    if (!userSettings?.timezone) return;
-
-    const checkForMidnight = () => {
-      checkAndResetDailyHabits();
-    };
-
-    // Check immediately
-    checkForMidnight();
-
-    // Set up interval to check every minute
-    const interval = setInterval(checkForMidnight, 60000);
-
-    return () => clearInterval(interval);
-  }, [userSettings?.timezone]);
-
-  // Check if we need to reset habits and routines for a new day
-  const checkAndResetDailyHabits = async () => {
-    const today = getTodayString();
-    const lastResetDate = await dataService.getLastResetDate();
-    
-    // If this is a new day, reset all habit and routine completions
-    if (lastResetDate !== today) {
-      // Clear today's habit completions and completion times
-      const currentCompletions = await dataService.getHabitCompletions();
-      const currentCompletionTimes = await dataService.getHabitCompletionTimes();
-      const currentRoutineCompletions = await dataService.getRoutineCompletions();
+  // Initialize today's data on app load
+  const initializeTodayData = async () => {
+    try {
+      const today = getTodayString();
+      // Initialize today's data - this will create fresh data if it doesn't exist
+      const todayData = await dataService.initializeTodayData(habits, routines, today);
       
-      // Remove today's data if it exists
-      if (currentCompletions[today]) {
-        delete currentCompletions[today];
-      }
-      if (currentCompletionTimes[today]) {
-        delete currentCompletionTimes[today];
-      }
-      if (currentRoutineCompletions[today]) {
-        delete currentRoutineCompletions[today];
-      }
+      // Update local state with today's data
+      setHabitCompletions(todayData.habits || {});
+      setHabitCompletionTimes(todayData.habitCompletionTimes || {});
+      setRoutineCompletions(todayData.routines || {});
       
-      // Update the data
-      await dataService.updateHabitCompletions(currentCompletions);
-      await dataService.updateHabitCompletionTimes(currentCompletionTimes);
-      await dataService.updateRoutineCompletions(currentRoutineCompletions);
+      // Update todos (combine persistent todos with today's todos)
+      const persistentTodos = await dataService.getTodos();
+      const todayTodos = todayData.todos || [];
+      setTodos([...persistentTodos, ...todayTodos]);
       
-      // Update local state
-      setHabitCompletions(currentCompletions);
-      setHabitCompletionTimes(currentCompletionTimes);
-      setRoutineCompletions(currentRoutineCompletions);
-      
-      // Update last reset date
-      await dataService.updateLastResetDate(today);
-      
-      // Also reset daily todos (remove todos that were added today)
-      const currentTodos = await dataService.getTodos();
-      const filteredTodos = currentTodos.filter(todo => todo.addedAt !== today);
-      await dataService.updateTodos(filteredTodos);
-      setTodos(filteredTodos);
-      
-      console.log('Daily reset completed for', today, 'in timezone', userSettings?.timezone || 'UTC');
+      console.log('Today\'s data initialized for', today);
+    } catch (error) {
+      console.error('Error initializing today\'s data:', error);
     }
   };
 
@@ -259,16 +219,18 @@ const HabitGoalTracker = () => {
   
   // Get today's date string in user's timezone
   const getTodayString = () => {
+    const now = new Date(); // Always get current time
+    
     if (!userSettings?.timezone) {
-      return currentDate.toISOString().split('T')[0];
+      return now.toISOString().split('T')[0];
     }
     
     try {
-      const userDate = new Date(currentDate.toLocaleString("en-US", { timeZone: userSettings.timezone }));
+      const userDate = new Date(now.toLocaleString("en-US", { timeZone: userSettings.timezone }));
       return userDate.toISOString().split('T')[0];
     } catch (error) {
       console.error('Error getting date in timezone:', error);
-      return currentDate.toISOString().split('T')[0];
+      return now.toISOString().split('T')[0];
     }
   };
   
@@ -2173,24 +2135,28 @@ const HabitGoalTracker = () => {
   // Get current day of week
   const getCurrentDay = () => {
     const days = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
-    return days[currentDate.getDay()];
+    const now = new Date();
+    return days[now.getDay()];
   };
   
   // Get quote of the day
   const getDailyQuote = () => {
-    const dayOfYear = Math.floor((currentDate - new Date(currentDate.getFullYear(), 0, 0)) / 1000 / 60 / 60 / 24);
+    const now = new Date();
+    const dayOfYear = Math.floor((now - new Date(now.getFullYear(), 0, 0)) / 1000 / 60 / 60 / 24);
     return quotes[dayOfYear % quotes.length];
   };
   
   // Get weekly focus
   const getWeeklyFocus = () => {
-    const weekNumber = Math.floor((currentDate - new Date(currentDate.getFullYear(), 0, 1)) / (7 * 24 * 60 * 60 * 1000));
+    const now = new Date();
+    const weekNumber = Math.floor((now - new Date(now.getFullYear(), 0, 1)) / (7 * 24 * 60 * 60 * 1000));
     return weeklyFocuses[weekNumber % weeklyFocuses.length];
   };
   
   // Get next routine based on time of day
   const getNextRoutine = () => {
-    const hour = currentDate.getHours();
+    const now = new Date();
+    const hour = now.getHours();
     const currentDay = getCurrentDay();
     
     const activeRoutines = routines.filter(r => r.days.includes(currentDay));
@@ -2246,7 +2212,8 @@ const HabitGoalTracker = () => {
   // Get next incomplete routine based on time and completion
   const getNextIncompleteRoutine = () => {
     const allRoutines = getAllDayRoutines();
-    const hour = currentDate.getHours();
+    const now = new Date();
+    const hour = now.getHours();
     
     // Determine which routine should be active based on time
     let targetTimeOfDay;
@@ -2324,13 +2291,10 @@ const HabitGoalTracker = () => {
     // Simple completion toggle - no timer functionality on homepage
     const newHabitCompletions = {
       ...currentCompletions,
-      [today]: {
-        ...(currentCompletions[today] || {}),
-        [habitId]: !isCurrentlyComplete
-      }
+      [habitId]: !isCurrentlyComplete
     };
     setHabitCompletions(newHabitCompletions);
-    await await dataService.updateHabitCompletions(newHabitCompletions);
+    await dataService.updateTodayHabits(newHabitCompletions, getTodayString());
 
     // If this is the current habit in an active routine, complete it
     if (activeRoutine && activeRoutine.habits[activeRoutineIndex] === habitId) {
@@ -2367,19 +2331,15 @@ const HabitGoalTracker = () => {
     // If completed, save the completion time
     if (completed && startTime) {
       const completionTime = (Date.now() - startTime) / 1000 / 60; // in minutes
-      const today = getTodayString();
       const currentCompletionTimes = habitCompletionTimes || {};
       
       const newCompletionTimes = {
         ...currentCompletionTimes,
-        [today]: {
-          ...(currentCompletionTimes[today] || {}),
-          [habitId]: completionTime
-        }
+        [habitId]: completionTime
       };
       
       setHabitCompletionTimes(newCompletionTimes);
-      await dataService.updateHabitCompletionTimes(newCompletionTimes);
+      await dataService.updateTodayHabitTimes(newCompletionTimes, getTodayString());
     }
     
     // Clear the timer
@@ -2641,7 +2601,7 @@ const HabitGoalTracker = () => {
   // Calculate habit streak
   const getHabitStreak = (habitId) => {
     let streak = 0;
-    let date = new Date(currentDate);
+    let date = new Date();
     
     // Check if habitCompletions exists and is an object
     if (!habitCompletions || typeof habitCompletions !== 'object') {
@@ -2729,33 +2689,25 @@ const HabitGoalTracker = () => {
     const startTime = activeTimers[habitId];
     if (startTime) {
       const completionTime = (Date.now() - startTime) / 1000 / 60; // in minutes
-      const today = getTodayString();
       const currentCompletionTimes = habitCompletionTimes || {};
       
       const newCompletionTimes = {
         ...currentCompletionTimes,
-        [today]: {
-          ...(currentCompletionTimes[today] || {}),
-          [habitId]: completionTime
-        }
+        [habitId]: completionTime
       };
       
       setHabitCompletionTimes(newCompletionTimes);
-      await dataService.updateHabitCompletionTimes(newCompletionTimes);
+      await dataService.updateTodayHabitTimes(newCompletionTimes, getTodayString());
     }
 
     // Mark habit complete
-    const today = getTodayString();
     const currentCompletions = habitCompletions || {};
     const newHabitCompletions = {
       ...currentCompletions,
-      [today]: {
-        ...(currentCompletions[today] || {}),
-        [habitId]: true
-      }
+      [habitId]: true
     };
     setHabitCompletions(newHabitCompletions);
-    await dataService.updateHabitCompletions(newHabitCompletions);
+    await dataService.updateTodayHabits(newHabitCompletions, getTodayString());
 
     // Clear the timer
     setActiveTimers(prev => {
@@ -3038,7 +2990,9 @@ const HabitGoalTracker = () => {
     };
     const newTodos = [...todos, newTodo];
     setTodos(newTodos);
-    await dataService.updateTodos(newTodos);
+    // Update today's todos in daily data
+    const todayTodos = newTodos.filter(t => t.addedAt === getTodayString());
+    await dataService.updateTodayTodos(todayTodos, getTodayString());
   };
   
   // Add custom todo
@@ -3052,7 +3006,9 @@ const HabitGoalTracker = () => {
     };
     const newTodos = [...todos, newTodo];
     setTodos(newTodos);
-    await dataService.updateTodos(newTodos);
+    // Update today's todos in daily data
+    const todayTodos = newTodos.filter(t => t.addedAt === getTodayString());
+    await dataService.updateTodayTodos(todayTodos, getTodayString());
   };
 
   // New functions for routine and single habit management
@@ -3225,14 +3181,18 @@ const HabitGoalTracker = () => {
       t.id === todoId ? { ...t, completed: !t.completed } : t
     );
     setTodos(newTodos);
-    await dataService.updateTodos(newTodos);
+    // Update today's todos in daily data
+    const todayTodos = newTodos.filter(t => t.addedAt === getTodayString());
+    await dataService.updateTodayTodos(todayTodos, getTodayString());
   };
   
   // Delete todo
   const deleteTodo = async (todoId) => {
     const newTodos = todos.filter(t => t.id !== todoId);
     setTodos(newTodos);
-    await dataService.updateTodos(newTodos);
+    // Update today's todos in daily data
+    const todayTodos = newTodos.filter(t => t.addedAt === getTodayString());
+    await dataService.updateTodayTodos(todayTodos, getTodayString());
   };
   
   // Export data to JSON file
@@ -3291,7 +3251,7 @@ const HabitGoalTracker = () => {
         <div className="bg-white rounded-xl shadow-md p-4">
           <h2 className="text-lg font-bold text-[#333333] mb-2">Today</h2>
           <p className="text-sm text-[#333333] opacity-70 font-mono">
-            {currentDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }).toUpperCase()}
+            {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }).toUpperCase()}
           </p>
           {currentUser && (
             <p className="text-xs text-[#333333] opacity-50 font-mono mt-1">
