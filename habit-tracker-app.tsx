@@ -3,7 +3,6 @@ import { Check, Circle, Plus, X, ChevronRight, Home, Target, Calendar, CheckSqua
 
 const HabitGoalTracker = () => {
   const [currentView, setCurrentView] = useState('dashboard');
-  const [currentDate, setCurrentDate] = useState(new Date());
   const [showHabitModal, setShowHabitModal] = useState(false);
   const [showGoalModal, setShowGoalModal] = useState(false);
   const [showTaskModal, setShowTaskModal] = useState(false);
@@ -84,7 +83,7 @@ const HabitGoalTracker = () => {
   
   // Get today's date string
   const getTodayString = () => {
-    return currentDate.toISOString().split('T')[0];
+    return new Date().toISOString().split('T')[0];
   };
   
   // Modal Components
@@ -322,24 +321,28 @@ const HabitGoalTracker = () => {
   // Get current day of week
   const getCurrentDay = () => {
     const days = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
-    return days[currentDate.getDay()];
+    const now = new Date();
+    return days[now.getDay()];
   };
   
   // Get quote of the day
   const getDailyQuote = () => {
-    const dayOfYear = Math.floor((currentDate - new Date(currentDate.getFullYear(), 0, 0)) / 1000 / 60 / 60 / 24);
+    const now = new Date();
+    const dayOfYear = Math.floor((now - new Date(now.getFullYear(), 0, 0)) / 1000 / 60 / 60 / 24);
     return quotes[dayOfYear % quotes.length];
   };
   
   // Get weekly focus
   const getWeeklyFocus = () => {
-    const weekNumber = Math.floor((currentDate - new Date(currentDate.getFullYear(), 0, 1)) / (7 * 24 * 60 * 60 * 1000));
+    const now = new Date();
+    const weekNumber = Math.floor((now - new Date(now.getFullYear(), 0, 1)) / (7 * 24 * 60 * 60 * 1000));
     return weeklyFocuses[weekNumber % weeklyFocuses.length];
   };
   
   // Get next routine based on time of day
   const getNextRoutine = () => {
-    const hour = currentDate.getHours();
+    const now = new Date();
+    const hour = now.getHours();
     const currentDay = getCurrentDay();
     
     const activeRoutines = routines.filter(r => r.days.includes(currentDay));
@@ -373,7 +376,7 @@ const HabitGoalTracker = () => {
   // Calculate habit streak
   const getHabitStreak = (habitId) => {
     let streak = 0;
-    let date = new Date(currentDate);
+    let date = new Date();
     
     while (true) {
       const dateString = date.toISOString().split('T')[0];
@@ -1118,7 +1121,7 @@ const HabitGoalTracker = () => {
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-2xl font-bold tracking-tight text-[#333333]">GROWTH TRACKER</h1>
-              <p className="text-sm text-[#333333] opacity-70 font-mono">{currentDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }).toUpperCase()}</p>
+              <p className="text-sm text-[#333333] opacity-70 font-mono">{new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }).toUpperCase()}</p>
             </div>
             <div className="relative data-menu-container">
               <button
