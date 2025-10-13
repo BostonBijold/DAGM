@@ -5366,8 +5366,7 @@ const HabitGoalTracker = () => {
   // Virtues View
   const VirtuesView = ({ selectedDate }) => {
     const [showVirtueHistory, setShowVirtueHistory] = useState(false);
-    const [historyViewMode, setHistoryViewMode] = useState('day');
-    const [historySelectedDate, setHistorySelectedDate] = useState(new Date());
+    const [historyViewMode, setHistoryViewMode] = useState('week');
     const [currentWeekStart, setCurrentWeekStart] = useState(() => getWeekStart(new Date()));
     
     // Get current week's virtue focus
@@ -5433,7 +5432,7 @@ const HabitGoalTracker = () => {
           
           {/* View Mode Toggle */}
           <div className="flex gap-2 mb-6">
-            {['day', 'week', 'month'].map((mode) => (
+            {['week', 'month'].map((mode) => (
               <button
                 key={mode}
                 onClick={() => setHistoryViewMode(mode)}
@@ -5449,82 +5448,6 @@ const HabitGoalTracker = () => {
           </div>
           
           {/* History Content */}
-          {historyViewMode === 'day' && (
-            <div className="space-y-4">
-              {/* Date Navigator */}
-              <div className="bg-white rounded-xl shadow-md p-4">
-                <div className="flex items-center justify-between mb-3">
-                  <button
-                    onClick={() => {
-                      const newDate = new Date(historySelectedDate);
-                      newDate.setDate(newDate.getDate() - 1);
-                      setHistorySelectedDate(newDate);
-                    }}
-                    className="p-2 hover:bg-stone-100 rounded-lg transition-colors"
-                  >
-                    <ChevronLeft size={24} strokeWidth={2.5} className="text-[#333333]" />
-                  </button>
-                  
-                  <div className="text-center">
-                    <p className="text-lg font-bold text-[#333333]">
-                      {historySelectedDate.toLocaleDateString('en-US', { weekday: 'long' })}
-                    </p>
-                    <p className="text-sm text-[#333333] opacity-70 font-mono">
-                      {historySelectedDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
-                    </p>
-                  </div>
-                  
-                  <button
-                    onClick={() => {
-                      const newDate = new Date(historySelectedDate);
-                      newDate.setDate(newDate.getDate() + 1);
-                      setHistorySelectedDate(newDate);
-                    }}
-                    className="p-2 hover:bg-stone-100 rounded-lg transition-colors"
-                    disabled={historySelectedDate.toDateString() === new Date().toDateString()}
-                  >
-                    <ChevronRight 
-                      size={24} 
-                      strokeWidth={2.5} 
-                      className={historySelectedDate.toDateString() === new Date().toDateString() ? "text-[#333333] opacity-30" : "text-[#333333]"} 
-                    />
-                  </button>
-                </div>
-                
-                <button
-                  onClick={() => setHistorySelectedDate(new Date())}
-                  className="w-full py-2 bg-stone-100 text-[#333333] rounded-lg hover:bg-stone-200 font-bold uppercase text-xs tracking-wider transition-colors"
-                >
-                  Today
-                </button>
-              </div>
-              
-              {/* Virtue Completion Stats */}
-              <div className="bg-white rounded-xl shadow-md p-4">
-                <h3 className="font-bold text-[#333333] mb-3 text-sm uppercase tracking-wide">Virtue Completion</h3>
-                <div className="flex items-center gap-4">
-                  <div className="flex-grow">
-                    <div className="w-full bg-stone-200 h-4 rounded-full">
-                      <div
-                        className="bg-blue-600 h-4 rounded-full transition-all flex items-center justify-end pr-2"
-                        style={{ width: `${getVirtueCompletionRate(historySelectedDate)}%` }}
-                      >
-                        {getVirtueCompletionRate(historySelectedDate) > 15 && (
-                          <span className="text-white font-bold text-xs">{getVirtueCompletionRate(historySelectedDate)}%</span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                  {getVirtueCompletionRate(historySelectedDate) <= 15 && (
-                    <span className="font-bold text-lg text-[#333333] font-mono">{getVirtueCompletionRate(historySelectedDate)}%</span>
-                  )}
-                </div>
-                <p className="text-xs text-[#333333] opacity-70 mt-2 font-mono uppercase tracking-wider">
-                  {Object.values(virtueCheckIns[historySelectedDate.toISOString().split('T')[0]] || {}).filter(Boolean).length} / {weeklyFocuses.length} virtues completed
-                </p>
-              </div>
-            </div>
-          )}
           
           {historyViewMode === 'week' && (
             <div className="space-y-4">
