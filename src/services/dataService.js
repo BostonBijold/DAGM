@@ -93,7 +93,7 @@ class DataService {
           habits: [],
           goals: [],
           todos: [],
-          dailyData: {}, // { "2024-01-15": { habits: {}, routines: {}, todos: [] } }
+          dailyData: {}, // { "2024-01-15": { habits: {}, routines: {}, todos: [], virtueCheckIns: {} } }
           dashboardOrder: [] // Array of {type: 'routine'|'habit', id: number, order: number}
         }
       };
@@ -250,6 +250,12 @@ class DataService {
     return userData?.data?.dashboardOrder || [];
   }
 
+  // Get today's virtue check-ins
+  async getTodayVirtues(todayString) {
+    const todayData = await this.getTodayData(todayString);
+    return todayData?.virtueCheckIns || {};
+  }
+
   // Specific Data Setters
   async updateRoutines(routines) {
     const userData = await this.getCurrentUserData();
@@ -311,6 +317,13 @@ class DataService {
     await this.updateDailyData(todayString, todayData);
   }
 
+  // Update today's virtue check-ins
+  async updateTodayVirtues(virtues, todayString) {
+    const todayData = await this.getTodayData(todayString) || { habits: {}, routines: {}, todos: [], virtueCheckIns: {} };
+    todayData.virtueCheckIns = virtues;
+    await this.updateDailyData(todayString, todayData);
+  }
+
   // Initialize today's data if it doesn't exist
   async initializeTodayData(habits, routines, todayString) {
     const todayData = await this.getTodayData(todayString);
@@ -321,7 +334,8 @@ class DataService {
         habits: {},
         routines: {},
         todos: [],
-        habitCompletionTimes: {}
+        habitCompletionTimes: {},
+        virtueCheckIns: {}
       };
       
       // Initialize all habits as incomplete
@@ -434,6 +448,8 @@ class DataService {
         userData.data.routines = [...userData.data.routines, ...missingRoutines];
         needsUpdate = true;
       }
+
+      // Virtue check-in is now standalone - no longer auto-added to routines
 
       // Ensure settings exist
       if (!userData.data.settings) {
