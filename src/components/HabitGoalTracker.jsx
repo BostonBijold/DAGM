@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Check, Circle, Plus, X, ChevronRight, Home, Target, Calendar, CheckSquare, Edit2, Trash2, Download, Upload, TrendingUp, ChevronLeft, User, Play, Pause, SkipBack, SkipForward, CheckCircle, GripVertical, AlertTriangle, RefreshCw } from 'lucide-react';
+import { Check, Circle, Plus, X, ChevronRight, Home, Target, Calendar, CheckSquare, Edit2, Trash2, Download, Upload, TrendingUp, ChevronLeft, User, Play, Pause, SkipBack, SkipForward, CheckCircle, GripVertical, AlertTriangle, RefreshCw, CheckCircle2 } from 'lucide-react';
 import dataService from '../services/dataService';
 import authService from '../services/authService';
 
@@ -35,6 +35,11 @@ const HabitGoalTracker = () => {
   const [showOrderRoutinesModal, setShowOrderRoutinesModal] = useState(false);
   const [showAddChoiceModal, setShowAddChoiceModal] = useState(false);
   
+  // Virtue check-in pagination state
+  const [currentVirtueIndex, setCurrentVirtueIndex] = useState(0);
+  const [tempVirtueResponses, setTempVirtueResponses] = useState({});
+  const [showVirtueSummary, setShowVirtueSummary] = useState(false);
+  
   // Sample motivational quotes
   const quotes = [
     "The secret of getting ahead is getting started.",
@@ -46,15 +51,51 @@ const HabitGoalTracker = () => {
   
   // "What Is A Good Man?" virtues for weekly focus
   const weeklyFocuses = [
-    { virtue: "Present", focus: "A Good Man Is Present. Be fully where you are this week." },
-    { virtue: "Determined", focus: "A Good Man Is Determined. Know your why and stand firm this week." },
-    { virtue: "Confident", focus: "A Good Man Is Confident. Keep your promises to yourself this week." },
-    { virtue: "Patient", focus: "A Good Man Is Patient. Do not complain this week." },
-    { virtue: "Genuine", focus: "A Good Man Is Genuine. Be your authentic self this week." },
-    { virtue: "Responsible", focus: "A Good Man Is Responsible. Take ownership this week." },
-    { virtue: "Strong", focus: "A Good Man Is Strong. Build your strength in all forms this week." },
-    { virtue: "Disciplined", focus: "A Good Man Is Disciplined. Master yourself this week." },
-    { virtue: "Humble", focus: "A Good Man Is Humble. Serve others before yourself this week." }
+    { 
+      virtue: "Present", 
+      focus: "A Good Man Is Present. Be fully where you are this week.",
+      description: "Being present means giving your full attention to the current moment, whether in conversation, work, or daily activities. It's about being mentally and emotionally engaged rather than distracted by past regrets or future worries. Practice this by putting away your phone during conversations, focusing on one task at a time, and truly listening when others speak."
+    },
+    { 
+      virtue: "Determined", 
+      focus: "A Good Man Is Determined. Know your why and stand firm this week.",
+      description: "Determination is the unwavering commitment to your goals and values, even when faced with obstacles or setbacks. It means having a clear sense of purpose and the persistence to see things through. Practice this by setting clear daily intentions, staying committed to your routines, and not giving up when things get difficult."
+    },
+    { 
+      virtue: "Confident", 
+      focus: "A Good Man Is Confident. Keep your promises to yourself this week.",
+      description: "True confidence comes from keeping the promises you make to yourself, not from external validation. It's about trusting in your abilities and decisions while remaining humble. Practice this by following through on your commitments, speaking up for what you believe in, and making decisions based on your values rather than others' opinions."
+    },
+    { 
+      virtue: "Patient", 
+      focus: "A Good Man Is Patient. Do not complain this week.",
+      description: "Patience is the ability to remain calm and composed in the face of delays, difficulties, or frustration. It means accepting what you cannot control and focusing on what you can. Practice this by taking deep breaths when frustrated, reframing setbacks as learning opportunities, and avoiding complaints about things beyond your control."
+    },
+    { 
+      virtue: "Genuine", 
+      focus: "A Good Man Is Genuine. Be your authentic self this week.",
+      description: "Being genuine means staying true to your values, beliefs, and personality without pretense or artificial behavior. It's about being honest with yourself and others about who you are. Practice this by expressing your true opinions respectfully, admitting when you're wrong, and not pretending to be someone you're not to fit in."
+    },
+    { 
+      virtue: "Responsible", 
+      focus: "A Good Man Is Responsible. Take ownership this week.",
+      description: "Responsibility means accepting accountability for your actions, decisions, and their consequences. It's about being reliable and dependable in all areas of your life. Practice this by admitting mistakes without making excuses, following through on commitments, and taking initiative to solve problems rather than waiting for others to act."
+    },
+    { 
+      virtue: "Strong", 
+      focus: "A Good Man Is Strong. Build your strength in all forms this week.",
+      description: "Strength encompasses physical, mental, emotional, and spiritual resilience. It's about developing the capacity to handle challenges and support others. Practice this by maintaining physical fitness, developing emotional intelligence, standing up for what's right, and being a source of support for those around you."
+    },
+    { 
+      virtue: "Disciplined", 
+      focus: "A Good Man Is Disciplined. Master yourself this week.",
+      description: "Discipline is the ability to control your impulses, maintain consistent habits, and work toward long-term goals despite short-term temptations. It's about self-mastery and delayed gratification. Practice this by maintaining consistent routines, resisting unhealthy temptations, and staying focused on your priorities even when it's difficult."
+    },
+    { 
+      virtue: "Humble", 
+      focus: "A Good Man Is Humble. Serve others before yourself this week.",
+      description: "Humility is the recognition that you are not the center of the universe and that others' needs matter as much as your own. It's about putting others first and recognizing your own limitations. Practice this by listening more than you speak, helping others without expecting recognition, and acknowledging when others have better ideas or solutions."
+    }
   ];
   
   // State for data - initialized from data service
@@ -71,6 +112,8 @@ const HabitGoalTracker = () => {
   const [routineCompletions, setRoutineCompletions] = useState({});
   const [expandedRoutines, setExpandedRoutines] = useState(new Set());
   const [selectedDate, setSelectedDate] = useState(new Date());
+  const [virtueCheckIns, setVirtueCheckIns] = useState({});
+  const [expandedVirtues, setExpandedVirtues] = useState(false);
   
   // Initialize data from data service
   useEffect(() => {
@@ -139,7 +182,8 @@ const HabitGoalTracker = () => {
   // Load user data from data service
   const loadUserData = async () => {
     try {
-      const [routinesData, habitsData, goalsData, todosData, habitCompletionsData, habitCompletionTimesData, routineCompletionsData, settingsData, dashboardOrderData] = await Promise.all([
+      const todayString = getTodayString();
+      const [routinesData, habitsData, goalsData, todosData, habitCompletionsData, habitCompletionTimesData, routineCompletionsData, settingsData, dashboardOrderData, virtueCheckInsData] = await Promise.all([
         dataService.getRoutines(),
         dataService.getHabits(),
         dataService.getGoals(),
@@ -148,7 +192,8 @@ const HabitGoalTracker = () => {
         dataService.getHabitCompletionTimes(),
         dataService.getRoutineCompletions(),
         dataService.getUserSettings(),
-        dataService.getDashboardOrder()
+        dataService.getDashboardOrder(),
+        dataService.getTodayVirtues(todayString)
       ]);
       
       // Validate data arrays
@@ -167,6 +212,7 @@ const HabitGoalTracker = () => {
       setRoutineCompletions(routineCompletionsData || {});
       setUserSettings(settingsData || {});
       setDashboardOrder(validatedDashboardOrder);
+      setVirtueCheckIns({ [todayString]: virtueCheckInsData || {} });
       
       // Return the loaded data for validation
       return {
@@ -1923,6 +1969,7 @@ const HabitGoalTracker = () => {
     const currentHabitId = activeRoutine.habits[activeRoutineIndex];
     const currentHabit = habits.find(h => h.id === currentHabitId);
     const today = getTodayString();
+    const weeklyFocus = getWeeklyFocus();
     
     // Calculate routine elapsed time
     const routineElapsed = routineStartTime ? (Date.now() - routineStartTime) / 1000 / 60 : 0;
@@ -1933,6 +1980,17 @@ const HabitGoalTracker = () => {
       const habitTime = habitCompletionTimes[today]?.[habitId];
       return { isComplete, habitTime };
     };
+
+    // Initialize virtue check-in state when virtue habit becomes active
+    useEffect(() => {
+      if (currentHabit && currentHabit.isVirtueCheckIn) {
+        const dateString = getSelectedDateString(selectedDate);
+        const existingResponses = virtueCheckIns[dateString] || {};
+        setTempVirtueResponses(existingResponses);
+        setCurrentVirtueIndex(0);
+        setShowVirtueSummary(false);
+      }
+    }, [currentHabit?.id, virtueCheckIns, selectedDate]);
 
     return (
       <div className="min-h-screen bg-[#333333] text-white">
@@ -2009,7 +2067,9 @@ const HabitGoalTracker = () => {
 
                 {/* Complete Button */}
                 <button
-                  onClick={() => completeRoutineHabit(currentHabit.id)}
+                  onClick={() => {
+                    completeRoutineHabit(currentHabit.id);
+                  }}
                   className="p-4 rounded-full bg-green-500 hover:bg-green-600 transition-colors shadow-lg"
                   title="Mark Complete"
                 >
@@ -2019,8 +2079,9 @@ const HabitGoalTracker = () => {
                 {/* Skip Forward */}
                 <button
                   onClick={skipCurrentHabit}
-                  className="p-3 rounded-full bg-stone-100 hover:bg-stone-200 transition-colors"
-                  title="Next Habit"
+                  disabled={activeRoutineIndex >= activeRoutine.habits.length - 1}
+                  className="p-3 rounded-full bg-stone-100 hover:bg-stone-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  title="Skip Habit"
                 >
                   <SkipForward size={24} strokeWidth={2.5} className="text-[#333333]" />
                 </button>
@@ -2114,6 +2175,174 @@ const HabitGoalTracker = () => {
     const now = new Date();
     const weekNumber = Math.floor((now - new Date(now.getFullYear(), 0, 1)) / (7 * 24 * 60 * 60 * 1000));
     return weeklyFocuses[weekNumber % weeklyFocuses.length];
+  };
+
+  // Check if user can check in for a specific date (today or yesterday only)
+  const canCheckInForDate = (date) => {
+    const today = new Date();
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+    
+    const targetDate = new Date(date);
+    const todayString = today.toISOString().split('T')[0];
+    const yesterdayString = yesterday.toISOString().split('T')[0];
+    const targetDateString = targetDate.toISOString().split('T')[0];
+    
+    return targetDateString === todayString || targetDateString === yesterdayString;
+  };
+
+  // Toggle virtue check-in (legacy - for backward compatibility)
+  const toggleVirtueCheckIn = async (virtueName) => {
+    const dateString = getSelectedDateString(selectedDate);
+    
+    if (!canCheckInForDate(selectedDate)) {
+      return; // Don't allow editing for dates other than today/yesterday
+    }
+    
+    try {
+      const currentVirtues = virtueCheckIns[dateString] || {};
+      const newVirtues = {
+        ...currentVirtues,
+        [virtueName]: !currentVirtues[virtueName]
+      };
+      
+      // Update local state
+      setVirtueCheckIns(prev => ({
+        ...prev,
+        [dateString]: newVirtues
+      }));
+      
+      // Update in Firestore
+      await dataService.updateTodayVirtues(newVirtues, dateString);
+      
+      // Update habit completion based on whether any virtues are checked
+      const checkedVirtuesCount = Object.values(newVirtues).filter(Boolean).length;
+      const isHabitComplete = checkedVirtuesCount > 0;
+      
+      // Update the virtue check-in habit completion
+      const virtueHabitId = 'virtue-checkin';
+      const currentHabitCompletions = habitCompletions[dateString] || {};
+      const newHabitCompletions = {
+        ...currentHabitCompletions,
+        [virtueHabitId]: isHabitComplete
+      };
+      
+      setHabitCompletions(prev => ({
+        ...prev,
+        [dateString]: newHabitCompletions
+      }));
+      
+      // Update in Firestore
+      await dataService.updateTodayHabits(newHabitCompletions, dateString);
+      
+    } catch (error) {
+      console.error('Error updating virtue check-in:', error);
+      // Revert local state on error
+      setVirtueCheckIns(prev => ({
+        ...prev,
+        [dateString]: virtueCheckIns[dateString] || {}
+      }));
+    }
+  };
+
+  // New paginated virtue check-in handlers
+  const selectVirtueResponse = (virtueName, response) => {
+    setTempVirtueResponses(prev => ({
+      ...prev,
+      [virtueName]: response
+    }));
+    
+    // Auto-advance to next virtue after selection
+    setTimeout(() => {
+      goToNextVirtue();
+    }, 300); // Small delay for visual feedback
+  };
+
+  const goToNextVirtue = () => {
+    if (currentVirtueIndex < weeklyFocuses.length - 1) {
+      setCurrentVirtueIndex(prev => prev + 1);
+    } else {
+      setShowVirtueSummary(true);
+    }
+  };
+
+  const goToPreviousVirtue = () => {
+    if (currentVirtueIndex > 0) {
+      setCurrentVirtueIndex(prev => prev - 1);
+    }
+  };
+
+  const goBackToVirtues = () => {
+    setShowVirtueSummary(false);
+  };
+
+  const completeVirtueCheckIn = async () => {
+    const dateString = getSelectedDateString(selectedDate);
+    
+    if (!canCheckInForDate(selectedDate)) {
+      return; // Don't allow editing for dates other than today/yesterday
+    }
+    
+    try {
+      // Update local state
+      setVirtueCheckIns(prev => ({
+        ...prev,
+        [dateString]: tempVirtueResponses
+      }));
+      
+      // Update in Firestore
+      await dataService.updateTodayVirtues(tempVirtueResponses, dateString);
+      
+      // Update habit completion based on whether any virtues are checked
+      const checkedVirtuesCount = Object.values(tempVirtueResponses).filter(Boolean).length;
+      const isHabitComplete = checkedVirtuesCount > 0;
+      
+      // Update the virtue check-in habit completion
+      const virtueHabitId = 'virtue-checkin';
+      const currentHabitCompletions = habitCompletions[dateString] || {};
+      const newHabitCompletions = {
+        ...currentHabitCompletions,
+        [virtueHabitId]: isHabitComplete
+      };
+      
+      setHabitCompletions(prev => ({
+        ...prev,
+        [dateString]: newHabitCompletions
+      }));
+      
+      // Update in Firestore
+      await dataService.updateTodayHabits(newHabitCompletions, dateString);
+      
+      // Reset pagination state and close modal
+      setCurrentVirtueIndex(0);
+      setTempVirtueResponses({});
+      setShowVirtueSummary(false);
+      setExpandedVirtues(false);
+      
+    } catch (error) {
+      console.error('Error completing virtue check-in:', error);
+    }
+  };
+
+  const startVirtueCheckIn = () => {
+    // Don't open modal if we're currently in the routine view and the virtue habit is active
+    // This prevents the modal from opening when the virtue check-in is integrated in the routine
+    if (showRoutineView && activeRoutine) {
+      const currentHabitId = activeRoutine.habits[activeRoutineIndex];
+      const currentHabit = habits.find(h => h.id === currentHabitId);
+      if (currentHabit?.isVirtueCheckIn) {
+        return;
+      }
+    }
+    
+    // Always allow modal to open from dashboard - users should be able to review
+    // virtue check-in even when a routine is active
+    const dateString = getSelectedDateString(selectedDate);
+    const existingResponses = virtueCheckIns[dateString] || {};
+    setTempVirtueResponses(existingResponses);
+    setCurrentVirtueIndex(0);
+    setShowVirtueSummary(false);
+    setExpandedVirtues(true);
   };
   
   // Get next routine based on time of day
@@ -2899,7 +3128,7 @@ const HabitGoalTracker = () => {
     };
     
     setRoutineCompletions(newRoutineCompletions);
-    await dataService.updateRoutineCompletions(newRoutineCompletions);
+    await dataService.updateTodayRoutines(newRoutineCompletions, today);
 
     // Clear routine state
     setActiveRoutine(null);
@@ -3308,6 +3537,12 @@ const HabitGoalTracker = () => {
                 ...prev,
                 [dateString]: historicalData.routines || {}
               }));
+
+              // Update virtue check-ins for the selected date
+              setVirtueCheckIns(prev => ({
+                ...prev,
+                [dateString]: historicalData.virtueCheckIns || {}
+              }));
             }
           }
         } catch (error) {
@@ -3333,6 +3568,8 @@ const HabitGoalTracker = () => {
           <p className="text-xl font-bold mb-1 text-[#333333]">{weeklyFocus.virtue}</p>
           <p className="text-sm text-[#333333]">{weeklyFocus.focus}</p>
         </div>
+        
+        
         
         {/* Daily Quote */}
         <div className="bg-white rounded-xl shadow-md p-6">
@@ -3387,7 +3624,7 @@ const HabitGoalTracker = () => {
             const stats = getRoutineCompletionStats(routine.id, getSelectedDateString(selectedDate));
             
             return (
-              <div key={routine.id} className="bg-white rounded-xl shadow-md">
+              <div key={`routine-${routine.id}`} className="bg-white rounded-xl shadow-md">
                 {/* Clickable Header */}
                 <div 
                   className="p-4 cursor-pointer flex items-center justify-between hover:bg-stone-50 transition-colors"
@@ -3429,6 +3666,7 @@ const HabitGoalTracker = () => {
                         if (!habit) return null;
                         const isComplete = habitCompletions[getSelectedDateString(selectedDate)]?.[habitId] || false;
                         const streak = getHabitStreak(habitId);
+                        
                         
                         return (
                           <div
@@ -3584,7 +3822,7 @@ const HabitGoalTracker = () => {
             const streak = getHabitStreak(habit.id);
             
             return (
-              <div key={habit.id} className="bg-white rounded-xl shadow-md p-4">
+              <div key={`habit-${habit.id}`} className="bg-white rounded-xl shadow-md p-4">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <div
@@ -4020,6 +4258,193 @@ const HabitGoalTracker = () => {
             )}
           </div>
         ))}
+        
+        {/* Virtue Check-in Modal - Fixed position overlay */}
+        {expandedVirtues && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-xl shadow-2xl border-2 border-blue-300 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+              <div className="px-6 py-4 border-b border-gray-200 sticky top-0 bg-white">
+                <div className="flex items-center justify-between">
+                  <h4 className="font-semibold text-[#333333] text-xl">Daily Virtue Check-in</h4>
+                  <button
+                    onClick={() => {
+                      setExpandedVirtues(false);
+                      setCurrentVirtueIndex(0);
+                      setTempVirtueResponses({});
+                      setShowVirtueSummary(false);
+                    }}
+                    className="text-gray-500 hover:text-gray-700"
+                  >
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+              
+              {!showVirtueSummary ? (
+                /* Virtue Page View */
+                <div className="px-6 py-8">
+                  {(() => {
+                    const currentVirtue = weeklyFocuses[currentVirtueIndex];
+                    const currentResponse = tempVirtueResponses[currentVirtue.virtue];
+                    const currentWeeklyFocus = getWeeklyFocus();
+                    const isCurrentWeekVirtue = currentVirtue.virtue === currentWeeklyFocus.virtue;
+                    const canEdit = canCheckInForDate(selectedDate);
+                    
+                    return (
+                      <div className="text-center">
+                        {/* Progress Indicator */}
+                        <div className="mb-6">
+                          <div className="flex items-center justify-center mb-2">
+                            <span className="text-sm text-gray-600">
+                              {currentVirtueIndex + 1} of {weeklyFocuses.length}
+                            </span>
+                          </div>
+                          <div className="w-full bg-gray-200 rounded-full h-2">
+                            <div 
+                              className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                              style={{ width: `${((currentVirtueIndex + 1) / weeklyFocuses.length) * 100}%` }}
+                            ></div>
+                          </div>
+                        </div>
+
+                        {/* Virtue Name */}
+                        <h3 className="text-3xl font-bold text-[#333333] mb-4">
+                          {currentVirtue.virtue}
+                          {isCurrentWeekVirtue && (
+                            <span className="ml-3 text-lg text-blue-600 font-normal">(This Week's Focus)</span>
+                          )}
+                        </h3>
+
+                        {/* Focus Statement */}
+                        <p className="text-lg text-blue-800 mb-6 font-medium">
+                          {currentVirtue.focus}
+                        </p>
+
+                        {/* Detailed Description */}
+                        <div className="text-left mb-8">
+                          <p className="text-gray-700 leading-relaxed">
+                            {currentVirtue.description}
+                          </p>
+                        </div>
+
+                        {/* Yes/No Buttons */}
+                        {canEdit ? (
+                          <div className="flex gap-4 justify-center mb-8">
+                            <button
+                              onClick={() => selectVirtueResponse(currentVirtue.virtue, true)}
+                              className={`px-8 py-4 rounded-xl text-lg font-semibold transition-all duration-200 ${
+                                currentResponse === true
+                                  ? 'bg-green-600 text-white shadow-lg transform scale-105'
+                                  : 'bg-green-100 text-green-700 hover:bg-green-200'
+                              }`}
+                            >
+                              ✓ Yes
+                            </button>
+                            <button
+                              onClick={() => selectVirtueResponse(currentVirtue.virtue, false)}
+                              className={`px-8 py-4 rounded-xl text-lg font-semibold transition-all duration-200 ${
+                                currentResponse === false
+                                  ? 'bg-red-600 text-white shadow-lg transform scale-105'
+                                  : 'bg-red-100 text-red-700 hover:bg-red-200'
+                              }`}
+                            >
+                              ✗ No
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="mb-8">
+                            <p className="text-gray-500 italic">
+                              You can only check in for today and yesterday
+                            </p>
+                          </div>
+                        )}
+
+                        {/* Navigation */}
+                        <div className="flex justify-center items-center">
+                          <button
+                            onClick={goToPreviousVirtue}
+                            disabled={currentVirtueIndex === 0}
+                            className="px-6 py-3 rounded-lg bg-gray-100 text-gray-700 font-medium hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                          >
+                            ← Previous
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
+              ) : (
+                /* Summary Page View */
+                <div className="px-6 py-8">
+                  <div className="text-center mb-8">
+                    <h3 className="text-2xl font-bold text-[#333333] mb-4">Your Virtue Check-in Summary</h3>
+                    <div className="text-lg text-gray-600">
+                      {Object.values(tempVirtueResponses).filter(Boolean).length} of {weeklyFocuses.length} virtues achieved today
+                    </div>
+                  </div>
+
+                  <div className="space-y-3 mb-8">
+                    {weeklyFocuses.map((virtue, index) => {
+                      const response = tempVirtueResponses[virtue.virtue];
+                      const currentWeeklyFocus = getWeeklyFocus();
+                      const isCurrentWeekVirtue = virtue.virtue === currentWeeklyFocus.virtue;
+                      
+                      return (
+                        <div 
+                          key={index}
+                          className={`flex items-center gap-4 p-4 rounded-lg border-2 ${
+                            response === true 
+                              ? 'bg-green-50 border-green-200' 
+                              : response === false 
+                                ? 'bg-red-50 border-red-200' 
+                                : 'bg-gray-50 border-gray-200'
+                          } ${isCurrentWeekVirtue ? 'ring-2 ring-blue-300' : ''}`}
+                        >
+                          <div className="text-2xl">
+                            {response === true ? '✓' : response === false ? '✗' : '○'}
+                          </div>
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2">
+                              <span className={`font-semibold ${
+                                response === true ? 'text-green-800' : response === false ? 'text-red-800' : 'text-gray-600'
+                              }`}>
+                                {virtue.virtue}
+                              </span>
+                              {isCurrentWeekVirtue && (
+                                <span className="text-xs text-blue-600 bg-blue-100 px-2 py-1 rounded">This Week's Focus</span>
+                              )}
+                            </div>
+                            <div className="text-sm text-gray-600">
+                              {virtue.focus}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  <div className="flex justify-between items-center">
+                    <button
+                      onClick={goBackToVirtues}
+                      className="px-6 py-3 rounded-lg bg-gray-100 text-gray-700 font-medium hover:bg-gray-200 transition-colors"
+                    >
+                      ← Go Back
+                    </button>
+                    
+                    <button
+                      onClick={completeVirtueCheckIn}
+                      className="px-8 py-3 rounded-lg bg-blue-600 text-white font-medium hover:bg-blue-700 transition-colors"
+                    >
+                      Complete Check-in
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
         
         {/* Single Habits Section */}
         {singleHabits.length > 0 && (
@@ -4896,6 +5321,409 @@ const HabitGoalTracker = () => {
     );
   };
   
+  // Helper functions for weekly grid view
+  const getWeekStart = (date) => {
+    const d = new Date(date);
+    const day = d.getDay();
+    const diff = d.getDate() - day; // Subtract days to get to Sunday
+    d.setDate(diff);
+    d.setHours(0, 0, 0, 0);
+    return d;
+  };
+  
+  const getWeekDays = (startDate) => {
+    const days = [];
+    for (let i = 0; i < 7; i++) {
+      const date = new Date(startDate);
+      date.setDate(startDate.getDate() + i);
+      days.push(date);
+    }
+    return days;
+  };
+  
+  const getVirtueDataForWeek = (weekStartDate) => {
+    const weekDays = getWeekDays(weekStartDate);
+    const weekData = {};
+    
+    weekDays.forEach(date => {
+      const dateStr = date.toISOString().split('T')[0];
+      weekData[dateStr] = virtueCheckIns[dateStr] || {};
+    });
+    
+    return weekData;
+  };
+  
+  const formatWeekRange = (weekStartDate) => {
+    const weekEndDate = new Date(weekStartDate);
+    weekEndDate.setDate(weekStartDate.getDate() + 6);
+    
+    const startStr = weekStartDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    const endStr = weekEndDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    
+    return `${startStr} - ${endStr}`;
+  };
+
+  // Virtues View
+  const VirtuesView = ({ selectedDate }) => {
+    const [showVirtueHistory, setShowVirtueHistory] = useState(false);
+    const [historyViewMode, setHistoryViewMode] = useState('day');
+    const [historySelectedDate, setHistorySelectedDate] = useState(new Date());
+    const [currentWeekStart, setCurrentWeekStart] = useState(() => getWeekStart(new Date()));
+    
+    // Get current week's virtue focus
+    const currentWeeklyFocus = getWeeklyFocus();
+    const currentVirtues = virtueCheckIns[getSelectedDateString(selectedDate)] || {};
+    const checkedVirtuesCount = Object.values(currentVirtues).filter(Boolean).length;
+    const hasCheckedVirtues = checkedVirtuesCount > 0;
+    
+    // Start virtue check-in
+    const startVirtueCheckIn = () => {
+      const dateString = getSelectedDateString(selectedDate);
+      const existingResponses = virtueCheckIns[dateString] || {};
+      setTempVirtueResponses(existingResponses);
+      setCurrentVirtueIndex(0);
+      setShowVirtueSummary(false);
+      setExpandedVirtues(true);
+    };
+    
+    // Get virtue check-in completion rate for a date
+    const getVirtueCompletionRate = (date) => {
+      const dateStr = date.toISOString().split('T')[0];
+      const virtues = virtueCheckIns[dateStr] || {};
+      const checkedCount = Object.values(virtues).filter(Boolean).length;
+      return Math.round((checkedCount / weeklyFocuses.length) * 100);
+    };
+    
+    // Get last 7 days for history
+    const getLast7Days = () => {
+      const days = [];
+      for (let i = 6; i >= 0; i--) {
+        const date = new Date();
+        date.setDate(date.getDate() - i);
+        days.push(date);
+      }
+      return days;
+    };
+    
+    // Week navigation functions
+    const navigateWeek = (direction) => {
+      const newWeekStart = new Date(currentWeekStart);
+      newWeekStart.setDate(currentWeekStart.getDate() + (direction * 7));
+      setCurrentWeekStart(newWeekStart);
+    };
+    
+    const goToCurrentWeek = () => {
+      setCurrentWeekStart(getWeekStart(new Date()));
+    };
+    
+    
+    if (showVirtueHistory) {
+      return (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-2xl font-bold text-[#333333] uppercase tracking-wide">Virtue History</h2>
+            <button
+              onClick={() => setShowVirtueHistory(false)}
+              className="flex items-center gap-2 bg-stone-200 text-[#333333] px-4 py-2 rounded-lg hover:bg-stone-300 font-bold uppercase text-xs tracking-wider transition-all"
+            >
+              <X size={18} strokeWidth={2.5} />
+              Close
+            </button>
+          </div>
+          
+          {/* View Mode Toggle */}
+          <div className="flex gap-2 mb-6">
+            {['day', 'week', 'month'].map((mode) => (
+              <button
+                key={mode}
+                onClick={() => setHistoryViewMode(mode)}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                  historyViewMode === mode
+                    ? 'bg-[#333333] text-white'
+                    : 'bg-white text-[#333333] hover:bg-stone-100'
+                }`}
+              >
+                {mode.charAt(0).toUpperCase() + mode.slice(1)}
+              </button>
+            ))}
+          </div>
+          
+          {/* History Content */}
+          {historyViewMode === 'day' && (
+            <div className="space-y-4">
+              {/* Date Navigator */}
+              <div className="bg-white rounded-xl shadow-md p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <button
+                    onClick={() => {
+                      const newDate = new Date(historySelectedDate);
+                      newDate.setDate(newDate.getDate() - 1);
+                      setHistorySelectedDate(newDate);
+                    }}
+                    className="p-2 hover:bg-stone-100 rounded-lg transition-colors"
+                  >
+                    <ChevronLeft size={24} strokeWidth={2.5} className="text-[#333333]" />
+                  </button>
+                  
+                  <div className="text-center">
+                    <p className="text-lg font-bold text-[#333333]">
+                      {historySelectedDate.toLocaleDateString('en-US', { weekday: 'long' })}
+                    </p>
+                    <p className="text-sm text-[#333333] opacity-70 font-mono">
+                      {historySelectedDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
+                    </p>
+                  </div>
+                  
+                  <button
+                    onClick={() => {
+                      const newDate = new Date(historySelectedDate);
+                      newDate.setDate(newDate.getDate() + 1);
+                      setHistorySelectedDate(newDate);
+                    }}
+                    className="p-2 hover:bg-stone-100 rounded-lg transition-colors"
+                    disabled={historySelectedDate.toDateString() === new Date().toDateString()}
+                  >
+                    <ChevronRight 
+                      size={24} 
+                      strokeWidth={2.5} 
+                      className={historySelectedDate.toDateString() === new Date().toDateString() ? "text-[#333333] opacity-30" : "text-[#333333]"} 
+                    />
+                  </button>
+                </div>
+                
+                <button
+                  onClick={() => setHistorySelectedDate(new Date())}
+                  className="w-full py-2 bg-stone-100 text-[#333333] rounded-lg hover:bg-stone-200 font-bold uppercase text-xs tracking-wider transition-colors"
+                >
+                  Today
+                </button>
+              </div>
+              
+              {/* Virtue Completion Stats */}
+              <div className="bg-white rounded-xl shadow-md p-4">
+                <h3 className="font-bold text-[#333333] mb-3 text-sm uppercase tracking-wide">Virtue Completion</h3>
+                <div className="flex items-center gap-4">
+                  <div className="flex-grow">
+                    <div className="w-full bg-stone-200 h-4 rounded-full">
+                      <div
+                        className="bg-blue-600 h-4 rounded-full transition-all flex items-center justify-end pr-2"
+                        style={{ width: `${getVirtueCompletionRate(historySelectedDate)}%` }}
+                      >
+                        {getVirtueCompletionRate(historySelectedDate) > 15 && (
+                          <span className="text-white font-bold text-xs">{getVirtueCompletionRate(historySelectedDate)}%</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  {getVirtueCompletionRate(historySelectedDate) <= 15 && (
+                    <span className="font-bold text-lg text-[#333333] font-mono">{getVirtueCompletionRate(historySelectedDate)}%</span>
+                  )}
+                </div>
+                <p className="text-xs text-[#333333] opacity-70 mt-2 font-mono uppercase tracking-wider">
+                  {Object.values(virtueCheckIns[historySelectedDate.toISOString().split('T')[0]] || {}).filter(Boolean).length} / {weeklyFocuses.length} virtues completed
+                </p>
+              </div>
+            </div>
+          )}
+          
+          {historyViewMode === 'week' && (
+            <div className="space-y-4">
+              {/* Week Navigation */}
+              <div className="bg-white rounded-xl shadow-md p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <button
+                    onClick={() => navigateWeek(-1)}
+                    className="p-2 hover:bg-stone-100 rounded-lg transition-colors"
+                  >
+                    <ChevronLeft size={24} strokeWidth={2.5} className="text-[#333333]" />
+                  </button>
+                  
+                  <div className="text-center">
+                    <p className="text-lg font-bold text-[#333333]">
+                      {formatWeekRange(currentWeekStart)}
+                    </p>
+                    <p className="text-sm text-[#333333] opacity-70 font-mono">
+                      Week of {currentWeekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                    </p>
+                  </div>
+                  
+                  <button
+                    onClick={() => navigateWeek(1)}
+                    className="p-2 hover:bg-stone-100 rounded-lg transition-colors"
+                  >
+                    <ChevronRight size={24} strokeWidth={2.5} className="text-[#333333]" />
+                  </button>
+                </div>
+                
+                <button
+                  onClick={goToCurrentWeek}
+                  className="w-full py-2 bg-stone-100 text-[#333333] rounded-lg hover:bg-stone-200 font-bold uppercase text-xs tracking-wider transition-colors"
+                >
+                  Current Week
+                </button>
+              </div>
+
+              {/* Weekly Virtue Grid */}
+              <div className="bg-white rounded-xl shadow-md p-4">
+                <h3 className="font-bold text-[#333333] mb-4 text-sm uppercase tracking-wide">Weekly Virtue Grid</h3>
+                <div className="overflow-x-auto">
+                  <table className="w-full border-collapse">
+                    <thead>
+                      <tr>
+                        <th className="text-left p-2 border-b border-stone-200 font-semibold text-[#333333] min-w-[120px]">Virtue</th>
+                        {getWeekDays(currentWeekStart).map((date, index) => {
+                          const isToday = date.toDateString() === new Date().toDateString();
+                          return (
+                            <th key={index} className={`text-center p-2 border-b border-stone-200 font-semibold text-[#333333] ${isToday ? 'bg-blue-50' : ''}`}>
+                              <div className="text-xs uppercase tracking-wider">
+                                {date.toLocaleDateString('en-US', { weekday: 'short' })}
+                              </div>
+                              <div className="text-xs text-[#333333] opacity-70 font-mono">
+                                {date.getDate()}
+                              </div>
+                            </th>
+                          );
+                        })}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {weeklyFocuses.map((virtue, virtueIndex) => {
+                        const weekData = getVirtueDataForWeek(currentWeekStart);
+                        return (
+                          <tr key={virtue.virtue} className="border-b border-stone-100">
+                            <td className="p-2 font-medium text-[#333333] text-sm">
+                              {virtue.virtue}
+                            </td>
+                            {getWeekDays(currentWeekStart).map((date, dayIndex) => {
+                              const dateStr = date.toISOString().split('T')[0];
+                              const virtueResponse = weekData[dateStr]?.[virtue.virtue];
+                              const isToday = date.toDateString() === new Date().toDateString();
+                              
+                              return (
+                                <td key={dayIndex} className={`text-center p-2 ${isToday ? 'bg-blue-50' : ''}`}>
+                                  {virtueResponse === true ? (
+                                    <span className="text-green-600 text-lg font-bold">✓</span>
+                                  ) : (
+                                    <span className="text-stone-300 text-lg">○</span>
+                                  )}
+                                </td>
+                              );
+                            })}
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    }
+    
+    return (
+      <div className="space-y-4">
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <h2 className="text-2xl font-bold text-[#333333] uppercase tracking-wide">Daily Virtue Check-in</h2>
+          <button
+            onClick={() => setShowVirtueHistory(true)}
+            className="flex items-center gap-2 bg-stone-200 text-[#333333] px-4 py-2 rounded-lg hover:bg-stone-300 font-bold uppercase text-xs tracking-wider transition-all"
+          >
+            <Calendar size={18} strokeWidth={2.5} />
+            History
+          </button>
+        </div>
+        
+        {/* Current Week's Focus */}
+        <div className="bg-blue-50 rounded-xl shadow-md p-6 border-2 border-blue-200">
+          <div className="text-center">
+            <h3 className="text-xl font-bold text-blue-800 mb-2">This Week's Focus</h3>
+            <p className="text-2xl font-bold text-[#333333] mb-2">{currentWeeklyFocus.virtue}</p>
+            <p className="text-lg text-blue-700 mb-4">{currentWeeklyFocus.focus}</p>
+            <p className="text-sm text-gray-600 leading-relaxed">{currentWeeklyFocus.description}</p>
+          </div>
+        </div>
+        
+        {/* Progress and Start Button */}
+        <div className="bg-white rounded-xl shadow-md p-6">
+          <div className="text-center">
+            <div className="mb-6">
+              <h3 className="text-lg font-bold text-[#333333] mb-2">Today's Progress</h3>
+              <div className="flex items-center justify-center gap-4 mb-4">
+                <div className="text-3xl font-bold text-[#333333] font-mono">
+                  {checkedVirtuesCount} / {weeklyFocuses.length}
+                </div>
+                <div className="text-sm text-gray-600">
+                  virtues completed
+                </div>
+              </div>
+              <div className="w-full bg-stone-200 h-4 rounded-full">
+                <div
+                  className="bg-blue-600 h-4 rounded-full transition-all"
+                  style={{ width: `${Math.round((checkedVirtuesCount / weeklyFocuses.length) * 100)}%` }}
+                ></div>
+              </div>
+            </div>
+            
+            <button
+              onClick={startVirtueCheckIn}
+              className="px-8 py-4 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 transition-colors text-lg"
+            >
+              {hasCheckedVirtues ? 'Continue Check-in' : 'Start Check-in'}
+            </button>
+          </div>
+        </div>
+        
+        {/* Daily Summary (if completed) */}
+        {hasCheckedVirtues && (
+          <div className="bg-white rounded-xl shadow-md p-6">
+            <h3 className="text-lg font-bold text-[#333333] mb-4 text-center">Today's Summary</h3>
+            <div className="space-y-3">
+              {weeklyFocuses.map((virtue, index) => {
+                const response = currentVirtues[virtue.virtue];
+                const isCurrentWeekVirtue = virtue.virtue === currentWeeklyFocus.virtue;
+                
+                return (
+                  <div 
+                    key={virtue.virtue}
+                    className={`flex items-center gap-4 p-3 rounded-lg border-2 ${
+                      response === true 
+                        ? 'bg-green-50 border-green-200' 
+                        : response === false 
+                          ? 'bg-red-50 border-red-200' 
+                          : 'bg-gray-50 border-gray-200'
+                    } ${isCurrentWeekVirtue ? 'ring-2 ring-blue-300' : ''}`}
+                  >
+                    <div className="text-xl">
+                      {response === true ? '✓' : response === false ? '✗' : '○'}
+                    </div>
+                    <div className="flex-1 text-left">
+                      <div className="flex items-center gap-2">
+                        <span className={`font-semibold ${
+                          response === true ? 'text-green-800' : response === false ? 'text-red-800' : 'text-gray-600'
+                        }`}>
+                          {virtue.virtue}
+                        </span>
+                        {isCurrentWeekVirtue && (
+                          <span className="text-xs text-blue-600 bg-blue-100 px-2 py-1 rounded">This Week's Focus</span>
+                        )}
+                      </div>
+                      <div className="text-sm text-gray-600">
+                        {virtue.focus}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   // Navigation
   const Navigation = () => {
     if (showRoutineView) return null; // Hide navigation when in routine view
@@ -4935,6 +5763,17 @@ const HabitGoalTracker = () => {
           >
             <Target size={24} strokeWidth={2.5} />
             <span className="text-xs mt-1 font-mono uppercase tracking-wider">Goals</span>
+          </button>
+          <button
+            onClick={() => setCurrentView('virtues')}
+            className={`flex flex-col items-center p-3 min-h-[68px] justify-center transition-all duration-200 ${
+              currentView === 'virtues' 
+                ? 'text-[#333333] scale-105' 
+                : 'text-[#333333] opacity-40 hover:opacity-70'
+            }`}
+          >
+            <CheckCircle2 size={24} strokeWidth={2.5} />
+            <span className="text-xs mt-1 font-mono uppercase tracking-wider">Virtues</span>
           </button>
         </div>
       </div>
@@ -4991,6 +5830,7 @@ const HabitGoalTracker = () => {
               {currentView === 'dashboard' && <DashboardView selectedDate={selectedDate} setSelectedDate={setSelectedDate} />}
               {currentView === 'routines' && <RoutinesView selectedDate={selectedDate} />}
               {currentView === 'goals' && <GoalsView />}
+              {currentView === 'virtues' && <VirtuesView selectedDate={selectedDate} />}
             </div>
           )}
         </div>
@@ -5076,6 +5916,156 @@ const HabitGoalTracker = () => {
               setRoutineToDelete(null);
             }} 
           />
+        )}
+
+        {/* Virtue Check-in Modal */}
+        {expandedVirtues && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+              <div className="p-6">
+                <div className="flex items-center justify-between mb-6">
+                  <h2 className="text-2xl font-bold text-[#333333]">Daily Virtue Check-in</h2>
+                  <button
+                    onClick={() => {
+                      setExpandedVirtues(false);
+                      setCurrentVirtueIndex(0);
+                      setTempVirtueResponses({});
+                      setShowVirtueSummary(false);
+                    }}
+                    className="p-2 hover:bg-stone-100 rounded-lg transition-colors"
+                  >
+                    <X size={24} strokeWidth={2.5} className="text-[#333333]" />
+                  </button>
+                </div>
+                
+                {!showVirtueSummary ? (
+                  // Virtue Question Display
+                  <div className="text-center">
+                    <h3 className="text-2xl font-bold text-[#333333] mb-2">
+                      {weeklyFocuses[currentVirtueIndex]?.virtue}
+                    </h3>
+                    <p className="text-lg text-blue-800 mb-6 font-medium">
+                      {weeklyFocuses[currentVirtueIndex]?.focus}
+                    </p>
+                    <div className="text-left mb-8">
+                      <p className="text-gray-700 leading-relaxed">
+                        {weeklyFocuses[currentVirtueIndex]?.description}
+                      </p>
+                    </div>
+                    
+                    {/* Yes/No Buttons */}
+                    <div className="flex gap-4 justify-center mb-8">
+                      <button
+                        onClick={() => selectVirtueResponse(weeklyFocuses[currentVirtueIndex]?.virtue, true)}
+                        className={`px-8 py-4 rounded-xl text-lg font-semibold transition-all duration-200 ${
+                          tempVirtueResponses[weeklyFocuses[currentVirtueIndex]?.virtue] === true
+                            ? 'bg-green-600 text-white shadow-lg transform scale-105'
+                            : 'bg-green-100 text-green-700 hover:bg-green-200'
+                        }`}
+                      >
+                        ✓ Yes
+                      </button>
+                      <button
+                        onClick={() => selectVirtueResponse(weeklyFocuses[currentVirtueIndex]?.virtue, false)}
+                        className={`px-8 py-4 rounded-xl text-lg font-semibold transition-all duration-200 ${
+                          tempVirtueResponses[weeklyFocuses[currentVirtueIndex]?.virtue] === false
+                            ? 'bg-red-600 text-white shadow-lg transform scale-105'
+                            : 'bg-red-100 text-red-700 hover:bg-red-200'
+                        }`}
+                      >
+                        ✗ No
+                      </button>
+                    </div>
+                    
+                    {/* Pagination Controls */}
+                    <div className="flex items-center justify-center gap-4 mb-4">
+                      <button
+                        onClick={goToPreviousVirtue}
+                        disabled={currentVirtueIndex === 0}
+                        className="px-6 py-3 rounded-lg bg-gray-100 text-gray-700 font-medium hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                      >
+                        ← Previous
+                      </button>
+                      <span className="text-sm text-gray-600 font-mono">
+                        {currentVirtueIndex + 1} / {weeklyFocuses.length}
+                      </span>
+                      <button
+                        onClick={goToNextVirtue}
+                        disabled={currentVirtueIndex >= weeklyFocuses.length - 1}
+                        className="px-6 py-3 rounded-lg bg-gray-100 text-gray-700 font-medium hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                      >
+                        Next →
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  // Summary Page Display
+                  <div className="text-center">
+                    <h3 className="text-2xl font-bold text-[#333333] mb-4">Your Virtue Check-in Summary</h3>
+                    <div className="text-lg text-gray-600 mb-8">
+                      {Object.values(tempVirtueResponses).filter(Boolean).length} of {weeklyFocuses.length} virtues achieved today
+                    </div>
+
+                    <div className="space-y-3 mb-8 max-h-64 overflow-y-auto">
+                      {weeklyFocuses.map((virtue, index) => {
+                        const response = tempVirtueResponses[virtue.virtue];
+                        const currentWeeklyFocus = getWeeklyFocus();
+                        const isCurrentWeekVirtue = virtue.virtue === currentWeeklyFocus.virtue;
+                        
+                        return (
+                          <div 
+                            key={virtue.virtue}
+                            className={`flex items-center gap-4 p-3 rounded-lg border-2 ${
+                              response === true 
+                                ? 'bg-green-50 border-green-200' 
+                                : response === false 
+                                  ? 'bg-red-50 border-red-200' 
+                                  : 'bg-gray-50 border-gray-200'
+                            } ${isCurrentWeekVirtue ? 'ring-2 ring-blue-300' : ''}`}
+                          >
+                            <div className="text-xl">
+                              {response === true ? '✓' : response === false ? '✗' : '○'}
+                            </div>
+                            <div className="flex-1 text-left">
+                              <div className="flex items-center gap-2">
+                                <span className={`font-semibold ${
+                                  response === true ? 'text-green-800' : response === false ? 'text-red-800' : 'text-gray-600'
+                                }`}>
+                                  {virtue.virtue}
+                                </span>
+                                {isCurrentWeekVirtue && (
+                                  <span className="text-xs text-blue-600 bg-blue-100 px-2 py-1 rounded">This Week's Focus</span>
+                                )}
+                              </div>
+                              <div className="text-sm text-gray-600">
+                                {virtue.focus}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    <div className="flex justify-between items-center">
+                      <button
+                        onClick={goBackToVirtues}
+                        className="px-6 py-3 rounded-lg bg-gray-100 text-gray-700 font-medium hover:bg-gray-200 transition-colors"
+                      >
+                        ← Go Back
+                      </button>
+                      
+                      <button
+                        onClick={completeVirtueCheckIn}
+                        className="px-8 py-3 rounded-lg bg-blue-600 text-white font-medium hover:bg-blue-700 transition-colors"
+                      >
+                        Complete Check-in
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
         )}
 
       </div>
