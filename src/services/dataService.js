@@ -63,9 +63,7 @@ class DataService {
           lastActive: serverTimestamp()
         },
         data: {
-          settings: {
-            timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC"
-          },
+          settings: {},
           routines: [
             {
               id: 1,
@@ -107,9 +105,18 @@ class DataService {
     return userDoc.data();
   }
 
+  // Check if online
+  isOnline() {
+    return navigator.onLine;
+  }
+
   // Get current user data
   async getCurrentUserData() {
     try {
+      if (!this.isOnline()) {
+        throw new Error('No internet connection. Please check your network and try again.');
+      }
+
       const userDocRef = this.getUserDocRef();
       const userDoc = await getDoc(userDocRef);
       
@@ -120,13 +127,27 @@ class DataService {
       return userDoc.data();
     } catch (error) {
       console.error('Error getting user data:', error);
-      throw error;
+      
+      // Handle specific Firebase errors
+      if (error.code === 'unavailable') {
+        throw new Error('Service temporarily unavailable. Please try again in a moment.');
+      } else if (error.code === 'permission-denied') {
+        throw new Error('Access denied. Please sign in again.');
+      } else if (error.message.includes('No internet connection')) {
+        throw error; // Re-throw network errors as-is
+      } else {
+        throw new Error('Failed to load data. Please try again.');
+      }
     }
   }
 
   // Update user data
   async updateUserData(data) {
     try {
+      if (!this.isOnline()) {
+        throw new Error('No internet connection. Changes will be saved when you reconnect.');
+      }
+
       const userDocRef = this.getUserDocRef();
       await updateDoc(userDocRef, {
         'data': data,
@@ -134,7 +155,17 @@ class DataService {
       });
     } catch (error) {
       console.error('Error updating user data:', error);
-      throw error;
+      
+      // Handle specific Firebase errors
+      if (error.code === 'unavailable') {
+        throw new Error('Service temporarily unavailable. Your changes will be saved when the service is back online.');
+      } else if (error.code === 'permission-denied') {
+        throw new Error('Access denied. Please sign in again.');
+      } else if (error.message.includes('No internet connection')) {
+        throw error; // Re-throw network errors as-is
+      } else {
+        throw new Error('Failed to save changes. Please try again.');
+      }
     }
   }
 
@@ -184,10 +215,9 @@ class DataService {
     await this.updateUserData(userData.data);
   }
 
-  // Get today's date string in user's timezone
+  // Get today's date string in browser timezone
   getTodayString() {
     const now = new Date();
-    // Use UTC for now - timezone handling should be done in the component
     return now.toISOString().split('T')[0];
   }
 
@@ -212,7 +242,7 @@ class DataService {
 
   async getUserSettings() {
     const userData = await this.getCurrentUserData();
-    return userData?.data?.settings || { timezone: "UTC" };
+    return userData?.data?.settings || {};
   }
 
   async getDashboardOrder() {
@@ -407,9 +437,7 @@ class DataService {
 
       // Ensure settings exist
       if (!userData.data.settings) {
-        userData.data.settings = {
-          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC"
-        };
+        userData.data.settings = {};
         needsUpdate = true;
       }
 

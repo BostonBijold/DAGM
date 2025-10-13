@@ -1,12 +1,15 @@
 import React from 'react';
 import HabitGoalTracker from './components/HabitGoalTracker';
 import AuthWrapper from './components/AuthWrapper';
+import ErrorBoundary from './components/ErrorBoundary';
 
 function App() {
   return (
-    <AuthWrapper>
-      <HabitGoalTracker />
-    </AuthWrapper>
+    <ErrorBoundary>
+      <AuthWrapper>
+        <HabitGoalTracker />
+      </AuthWrapper>
+    </ErrorBoundary>
   );
 }
 

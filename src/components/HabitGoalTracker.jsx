@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Check, Circle, Plus, X, ChevronRight, Home, Target, Calendar, CheckSquare, Edit2, Trash2, Download, Upload, TrendingUp, ChevronLeft, User, Play, Pause, SkipBack, SkipForward, CheckCircle, Settings, GripVertical } from 'lucide-react';
+import { Check, Circle, Plus, X, ChevronRight, Home, Target, Calendar, CheckSquare, Edit2, Trash2, Download, Upload, TrendingUp, ChevronLeft, User, Play, Pause, SkipBack, SkipForward, CheckCircle, GripVertical, AlertTriangle, RefreshCw } from 'lucide-react';
 import dataService from '../services/dataService';
 import authService from '../services/authService';
 
@@ -12,6 +12,8 @@ const HabitGoalTracker = () => {
   const [showDataMenu, setShowDataMenu] = useState(false);
   const [currentUser, setCurrentUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [dataLoaded, setDataLoaded] = useState(false);
+  const [error, setError] = useState(null);
   const [showRoutineEditModal, setShowRoutineEditModal] = useState(false);
   const [editingRoutine, setEditingRoutine] = useState(null);
   const [showHabitEditModal, setShowHabitEditModal] = useState(false);
@@ -23,7 +25,6 @@ const HabitGoalTracker = () => {
   const [timerUpdateTrigger, setTimerUpdateTrigger] = useState(0);
   const [showUserManager, setShowUserManager] = useState(false);
   const [userSettings, setUserSettings] = useState(null);
-  const [showSettings, setShowSettings] = useState(false);
   
   // New state for routine and single habit management
   const [showAddRoutineModal, setShowAddRoutineModal] = useState(false);
@@ -69,21 +70,50 @@ const HabitGoalTracker = () => {
   const [routinePaused, setRoutinePaused] = useState(false);
   const [routineCompletions, setRoutineCompletions] = useState({});
   const [expandedRoutines, setExpandedRoutines] = useState(new Set());
+  const [selectedDate, setSelectedDate] = useState(new Date());
   
   // Initialize data from data service
   useEffect(() => {
     const initializeApp = async () => {
       try {
         setLoading(true);
+        setError(null);
+        setDataLoaded(false);
+        
         const user = authService.getCurrentUser();
-        if (user) {
-          setCurrentUser(user);
-          await loadUserData();
-          // Initialize today's data after loading user data
-          await initializeTodayData();
+        if (!user) {
+          setLoading(false);
+          return;
         }
+        
+        setCurrentUser(user);
+        
+        // 1. Ensure default routines exist
+        await dataService.ensureDefaultRoutines();
+        
+        // 2. Load all base data
+        const userData = await loadUserData();
+        
+        // 3. Validate data exists and has correct structure
+        if (!userData || !userData.data) {
+          throw new Error('Failed to load user data');
+        }
+        
+        if (!Array.isArray(userData.data.routines)) {
+          throw new Error('Invalid routines data');
+        }
+        
+        if (!Array.isArray(userData.data.habits)) {
+          throw new Error('Invalid habits data');
+        }
+        
+        // 4. Initialize today's data with validated data
+        await initializeTodayData(userData.data.habits, userData.data.routines);
+        
+        setDataLoaded(true);
       } catch (error) {
         console.error('Error initializing app:', error);
+        setError(error.message);
       } finally {
         setLoading(false);
       }
@@ -109,9 +139,6 @@ const HabitGoalTracker = () => {
   // Load user data from data service
   const loadUserData = async () => {
     try {
-      // Ensure default routines exist
-      await dataService.ensureDefaultRoutines();
-      
       const [routinesData, habitsData, goalsData, todosData, habitCompletionsData, habitCompletionTimesData, routineCompletionsData, settingsData, dashboardOrderData] = await Promise.all([
         dataService.getRoutines(),
         dataService.getHabits(),
@@ -124,17 +151,37 @@ const HabitGoalTracker = () => {
         dataService.getDashboardOrder()
       ]);
       
-      setRoutines(routinesData);
-      setHabits(habitsData);
-      setGoals(goalsData);
-      setTodos(todosData);
-      setHabitCompletions(habitCompletionsData);
-      setHabitCompletionTimes(habitCompletionTimesData);
-      setRoutineCompletions(routineCompletionsData);
-      setUserSettings(settingsData);
-      setDashboardOrder(dashboardOrderData);
+      // Validate data arrays
+      const validatedRoutines = Array.isArray(routinesData) ? routinesData : [];
+      const validatedHabits = Array.isArray(habitsData) ? habitsData : [];
+      const validatedGoals = Array.isArray(goalsData) ? goalsData : [];
+      const validatedTodos = Array.isArray(todosData) ? todosData : [];
+      const validatedDashboardOrder = Array.isArray(dashboardOrderData) ? dashboardOrderData : [];
+      
+      setRoutines(validatedRoutines);
+      setHabits(validatedHabits);
+      setGoals(validatedGoals);
+      setTodos(validatedTodos);
+      setHabitCompletions(habitCompletionsData || {});
+      setHabitCompletionTimes(habitCompletionTimesData || {});
+      setRoutineCompletions(routineCompletionsData || {});
+      setUserSettings(settingsData || {});
+      setDashboardOrder(validatedDashboardOrder);
+      
+      // Return the loaded data for validation
+      return {
+        data: {
+          routines: validatedRoutines,
+          habits: validatedHabits,
+          goals: validatedGoals,
+          todos: validatedTodos,
+          settings: settingsData || {},
+          dashboardOrder: validatedDashboardOrder
+        }
+      };
     } catch (error) {
       console.error('Error loading user data:', error);
+      throw error;
     }
   };
 
@@ -149,11 +196,21 @@ const HabitGoalTracker = () => {
   }, [routines, habitCompletions]);
 
   // Initialize today's data on app load
-  const initializeTodayData = async () => {
+  const initializeTodayData = async (habitsData, routinesData) => {
     try {
       const today = getTodayString();
+      
+      // Validate input data
+      const validatedHabits = Array.isArray(habitsData) ? habitsData : habits;
+      const validatedRoutines = Array.isArray(routinesData) ? routinesData : routines;
+      
       // Initialize today's data - this will create fresh data if it doesn't exist
-      const todayData = await dataService.initializeTodayData(habits, routines, today);
+      const todayData = await dataService.initializeTodayData(validatedHabits, validatedRoutines, today);
+      
+      // Validate today's data structure
+      if (!todayData || typeof todayData !== 'object') {
+        throw new Error('Invalid today\'s data structure');
+      }
       
       // Update local state with today's data
       setHabitCompletions(todayData.habits || {});
@@ -163,11 +220,14 @@ const HabitGoalTracker = () => {
       // Update todos (combine persistent todos with today's todos)
       const persistentTodos = await dataService.getTodos();
       const todayTodos = todayData.todos || [];
-      setTodos([...persistentTodos, ...todayTodos]);
+      const validatedPersistentTodos = Array.isArray(persistentTodos) ? persistentTodos : [];
+      const validatedTodayTodos = Array.isArray(todayTodos) ? todayTodos : [];
+      setTodos([...validatedPersistentTodos, ...validatedTodayTodos]);
       
       console.log('Today\'s data initialized for', today);
     } catch (error) {
       console.error('Error initializing today\'s data:', error);
+      throw error;
     }
   };
 
@@ -217,21 +277,20 @@ const HabitGoalTracker = () => {
     return () => clearInterval(interval);
   }, [activeTimers ? Object.keys(activeTimers).length : 0]);
   
-  // Get today's date string in user's timezone
+  // Get today's date string in browser timezone
   const getTodayString = () => {
-    const now = new Date(); // Always get current time
-    
-    if (!userSettings?.timezone) {
-      return now.toISOString().split('T')[0];
-    }
-    
-    try {
-      const userDate = new Date(now.toLocaleString("en-US", { timeZone: userSettings.timezone }));
-      return userDate.toISOString().split('T')[0];
-    } catch (error) {
-      console.error('Error getting date in timezone:', error);
-      return now.toISOString().split('T')[0];
-    }
+    const now = new Date();
+    return now.toISOString().split('T')[0];
+  };
+
+  // Get date string for selected date
+  const getSelectedDateString = (date) => {
+    return date.toISOString().split('T')[0];
+  };
+
+  // Helper function to safely get array data
+  const getSafeArray = (array, fallback = []) => {
+    return Array.isArray(array) ? array : fallback;
   };
   
   // Modal Components
@@ -1500,104 +1559,6 @@ const HabitGoalTracker = () => {
     );
   };
 
-  // Settings Modal
-  const SettingsModal = ({ onClose }) => {
-    const [timezone, setTimezone] = useState(userSettings?.timezone || 'UTC');
-    const [isLoading, setIsLoading] = useState(false);
-
-    // Common timezones for the dropdown
-    const commonTimezones = [
-      'UTC',
-      'America/New_York',
-      'America/Chicago', 
-      'America/Denver',
-      'America/Los_Angeles',
-      'America/Toronto',
-      'America/Vancouver',
-      'Europe/London',
-      'Europe/Paris',
-      'Europe/Berlin',
-      'Europe/Rome',
-      'Asia/Tokyo',
-      'Asia/Shanghai',
-      'Asia/Kolkata',
-      'Australia/Sydney',
-      'Australia/Melbourne',
-      'Pacific/Auckland'
-    ];
-
-    const handleSave = async () => {
-      setIsLoading(true);
-      try {
-        const newSettings = { timezone };
-        setUserSettings(newSettings);
-        await dataService.updateUserSettings(newSettings);
-        onClose();
-      } catch (error) {
-        console.error('Error saving settings:', error);
-        alert('Error saving settings. Please try again.');
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    return (
-      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-        <div className="bg-white rounded-xl shadow-2xl p-6 w-full max-w-md mx-4">
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-xl font-bold text-[#333333] uppercase tracking-wide">
-              Settings
-            </h2>
-            <button
-              onClick={onClose}
-              className="p-1 hover:bg-stone-100 rounded transition-colors"
-            >
-              <X size={20} strokeWidth={2.5} className="text-[#333333] opacity-60" />
-            </button>
-          </div>
-          
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-bold text-[#333333] mb-2 uppercase tracking-wider">
-                Timezone
-              </label>
-              <select
-                value={timezone}
-                onChange={(e) => setTimezone(e.target.value)}
-                className="w-full px-3 py-2 border-2 border-stone-300 rounded-lg focus:outline-none focus:border-[#333333] text-sm"
-              >
-                {commonTimezones.map(tz => (
-                  <option key={tz} value={tz}>
-                    {tz.replace('_', ' ')}
-                  </option>
-                ))}
-              </select>
-              <p className="text-xs text-stone-500 mt-1">
-                Routines will reset at midnight in your selected timezone
-              </p>
-            </div>
-          </div>
-          
-          <div className="flex gap-2 pt-6">
-            <button
-              onClick={onClose}
-              className="flex-1 px-4 py-2.5 border-2 border-[#333333] text-[#333333] rounded-lg hover:bg-stone-100 font-bold uppercase text-sm tracking-wider transition-colors"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={handleSave}
-              disabled={isLoading}
-              className="flex-1 px-4 py-2.5 bg-black text-white rounded-lg hover:bg-[#333333] font-bold uppercase text-sm tracking-wider shadow-lg transition-all hover:shadow-xl hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {isLoading ? 'Saving...' : 'Save Settings'}
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  };
-
   // Order Routines Modal
   const OrderRoutinesModal = ({ onClose }) => {
     const [draggedItem, setDraggedItem] = useState(null);
@@ -1608,9 +1569,11 @@ const HabitGoalTracker = () => {
     useEffect(() => {
       // Use dashboard order if available, otherwise use routine order
       if (dashboardOrder.length > 0) {
-        const singleHabits = habits.filter(h => h.routineId === null);
+        const safeHabits = getSafeArray(habits);
+        const safeRoutines = getSafeArray(routines);
+        const singleHabits = safeHabits.filter(h => h.routineId === null);
         const allItems = [
-          ...routines.map(r => ({ ...r, type: 'routine' })),
+          ...safeRoutines.map(r => ({ ...r, type: 'routine' })),
           ...singleHabits.map(h => ({ ...h, type: 'habit' }))
         ];
         
@@ -2181,11 +2144,11 @@ const HabitGoalTracker = () => {
   };
 
   // Get routine completion percentage
-  const getRoutineCompletionPercentage = (routineId) => {
+  const getRoutineCompletionPercentage = (routineId, dateString = null) => {
     const routine = routines.find(r => r.id === routineId);
     if (!routine || routine.habits.length === 0) return 0;
     
-    const today = getTodayString();
+    const today = dateString || getTodayString();
     const completedHabits = routine.habits.filter(habitId => 
       habitCompletions[today]?.[habitId] || false
     );
@@ -2194,15 +2157,15 @@ const HabitGoalTracker = () => {
   };
 
   // Get routine completion stats
-  const getRoutineCompletionStats = (routineId) => {
+  const getRoutineCompletionStats = (routineId, dateString = null) => {
     const routine = routines.find(r => r.id === routineId);
     if (!routine) return { completed: false, totalTime: 0, percentage: 0 };
     
-    const percentage = getRoutineCompletionPercentage(routineId);
+    const today = dateString || getTodayString();
+    const percentage = getRoutineCompletionPercentage(routineId, today);
     const completed = percentage === 100;
     
     // Calculate total time from routine completions
-    const today = getTodayString();
     const routineCompletion = routineCompletions[today]?.[routineId];
     const totalTime = routineCompletion?.totalTime || 0;
     
@@ -2262,43 +2225,52 @@ const HabitGoalTracker = () => {
   };
   
   // Toggle habit completion
-  const toggleHabitCompletion = async (habitId) => {
-    // If a routine is active, prevent manual toggling of other habits
-    if (activeRoutine && activeRoutine.habits[activeRoutineIndex] !== habitId) {
-      return; // Don't allow manual toggle of other habits during routine
-    }
-
-    const today = getTodayString();
-    const currentCompletions = habitCompletions || {};
-    const isCurrentlyComplete = currentCompletions[today]?.[habitId] || false;
-    
-    // Only handle timer logic if we're in an active routine
-    if (activeRoutine) {
-      // If completing the habit and it has a timer running, stop the timer and save time
-      if (!isCurrentlyComplete && activeTimers[habitId]) {
-        stopTimer(habitId, true);
-      }
+  const toggleHabitCompletion = async (habitId, dateString = null) => {
+    try {
       
-      // If starting the habit and it doesn't have a duration cap, start an uncapped timer
-      if (isCurrentlyComplete && !activeTimers[habitId]) {
-        const habit = habits.find(h => h.id === habitId);
-        if (habit && !habit.duration) {
-          startUncappedTimer(habitId);
+      // If a routine is active, prevent manual toggling of other habits
+      if (activeRoutine && activeRoutine.habits[activeRoutineIndex] !== habitId) {
+        return; // Don't allow manual toggle of other habits during routine
+      }
+
+      const today = dateString || getTodayString();
+      const currentCompletions = habitCompletions || {};
+      const isCurrentlyComplete = currentCompletions[today]?.[habitId] || false;
+    
+      // Only handle timer logic if we're in an active routine
+      if (activeRoutine) {
+        // If completing the habit and it has a timer running, stop the timer and save time
+        if (!isCurrentlyComplete && activeTimers[habitId]) {
+          stopTimer(habitId, true);
+        }
+        
+        // If starting the habit and it doesn't have a duration cap, start an uncapped timer
+        if (isCurrentlyComplete && !activeTimers[habitId]) {
+          const habit = habits.find(h => h.id === habitId);
+          if (habit && !habit.duration) {
+            startUncappedTimer(habitId);
+          }
         }
       }
-    }
 
-    // Simple completion toggle - no timer functionality on homepage
-    const newHabitCompletions = {
-      ...currentCompletions,
-      [habitId]: !isCurrentlyComplete
-    };
-    setHabitCompletions(newHabitCompletions);
-    await dataService.updateTodayHabits(newHabitCompletions, getTodayString());
+      // Simple completion toggle - no timer functionality on homepage
+      const newHabitCompletions = {
+        ...currentCompletions,
+        [today]: {
+          ...currentCompletions[today],
+          [habitId]: !isCurrentlyComplete
+        }
+      };
+      setHabitCompletions(newHabitCompletions);
+      await dataService.updateTodayHabits(newHabitCompletions[today], today);
 
-    // If this is the current habit in an active routine, complete it
-    if (activeRoutine && activeRoutine.habits[activeRoutineIndex] === habitId) {
-      completeRoutineHabit(habitId);
+      // If this is the current habit in an active routine, complete it
+      if (activeRoutine && activeRoutine.habits[activeRoutineIndex] === habitId) {
+        completeRoutineHabit(habitId);
+      }
+    } catch (error) {
+      console.error('Error toggling habit completion:', error);
+      // Don't break the app if habit toggle fails
     }
   };
 
@@ -3100,9 +3072,11 @@ const HabitGoalTracker = () => {
 
   // Get ordered dashboard items
   const getOrderedDashboardItems = () => {
-    const singleHabits = habits.filter(h => h.routineId === null);
+    const safeHabits = getSafeArray(habits);
+    const safeRoutines = getSafeArray(routines);
+    const singleHabits = safeHabits.filter(h => h.routineId === null);
     const allItems = [
-      ...routines.map(r => ({ type: 'routine', id: r.id, data: r })),
+      ...safeRoutines.map(r => ({ type: 'routine', id: r.id, data: r })),
       ...singleHabits.map(h => ({ type: 'habit', id: h.id, data: h }))
     ];
 
@@ -3131,9 +3105,11 @@ const HabitGoalTracker = () => {
   // Initialize dashboard order if empty
   const initializeDashboardOrder = async () => {
     if (dashboardOrder.length === 0) {
-      const singleHabits = habits.filter(h => h.routineId === null);
+      const safeHabits = getSafeArray(habits);
+      const safeRoutines = getSafeArray(routines);
+      const singleHabits = safeHabits.filter(h => h.routineId === null);
       const allItems = [
-        ...routines.map(r => ({ type: 'routine', id: r.id, order: r.order })),
+        ...safeRoutines.map(r => ({ type: 'routine', id: r.id, order: r.order })),
         ...singleHabits.map(h => ({ type: 'habit', id: h.id, order: 999 }))
       ];
       
@@ -3154,9 +3130,11 @@ const HabitGoalTracker = () => {
       await updateDashboardOrder(newOrder);
     } else {
       // Clean up any invalid items in existing dashboard order
-      const singleHabits = habits.filter(h => h.routineId === null);
+      const safeHabits = getSafeArray(habits);
+      const safeRoutines = getSafeArray(routines);
+      const singleHabits = safeHabits.filter(h => h.routineId === null);
       const validItems = [
-        ...routines.map(r => ({ type: 'routine', id: r.id })),
+        ...safeRoutines.map(r => ({ type: 'routine', id: r.id })),
         ...singleHabits.map(h => ({ type: 'habit', id: h.id }))
       ];
       
@@ -3238,32 +3216,116 @@ const HabitGoalTracker = () => {
   };
   
   // Dashboard View
-  const DashboardView = () => {
+  const DashboardView = ({ selectedDate, setSelectedDate }) => {
+    
+    // Navigate dates
+    const changeDate = (increment) => {
+      const newDate = new Date(selectedDate);
+      newDate.setDate(newDate.getDate() + increment);
+      setSelectedDate(newDate);
+    };
+    
+    
+    // Get routine completions for a specific date
+    const getRoutineCompletionsForDate = (date) => {
+      const dateStr = getSelectedDateString(date);
+      return routineCompletions[dateStr] || {};
+    };
+    
+    // Get day of week for a specific date
+    const getDayOfWeekForDate = (date) => {
+      const days = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
+      return days[date.getDay()];
+    };
+    
+    // Get routines scheduled for a specific date
+    const getRoutinesForDate = (date) => {
+      const dayOfWeek = getDayOfWeekForDate(date);
+      return routines.filter(r => r.days.includes(dayOfWeek));
+    };
+    
+    // Get ordered dashboard items for a specific date
+    const getOrderedDashboardItemsForDate = (date) => {
+      const routinesForDate = getRoutinesForDate(date);
+      const safeHabits = getSafeArray(habits);
+      const singleHabits = safeHabits.filter(h => h.routineId === null);
+      const allItems = [
+        ...routinesForDate.map(r => ({ type: 'routine', id: r.id, data: r })),
+        ...singleHabits.map(h => ({ type: 'habit', id: h.id, data: h }))
+      ];
+
+      // If no custom order exists, use default order
+      if (dashboardOrder.length === 0) {
+        return allItems.sort((a, b) => {
+          if (a.type === 'routine' && b.type === 'habit') return -1;
+          if (a.type === 'habit' && b.type === 'routine') return 1;
+          return a.data.order - b.data.order;
+        });
+      }
+
+      // Apply custom order
+      const orderedItems = [];
+      dashboardOrder.forEach(itemId => {
+        const item = allItems.find(item => item.id === itemId);
+        if (item) orderedItems.push(item);
+      });
+
+      // Add any new items not in the custom order
+      allItems.forEach(item => {
+        if (!dashboardOrder.includes(item.id)) {
+          orderedItems.push(item);
+        }
+      });
+
+      return orderedItems;
+    };
+    
+    // Load historical data when selected date changes
+    useEffect(() => {
+      const loadHistoricalData = async () => {
+        try {
+          const dateString = getSelectedDateString(selectedDate);
+          const todayString = getTodayString();
+          
+          // Only load historical data if it's not today and we don't already have the data
+          if (dateString !== todayString && !habitCompletions[dateString]) {
+            const historicalData = await dataService.getTodayData(dateString);
+            if (historicalData) {
+              // Update habit completions for the selected date
+              setHabitCompletions(prev => ({
+                ...prev,
+                [dateString]: historicalData.habits || {}
+              }));
+              
+              // Update habit completion times for the selected date
+              setHabitCompletionTimes(prev => ({
+                ...prev,
+                [dateString]: historicalData.habitCompletionTimes || {}
+              }));
+              
+              // Update routine completions for the selected date
+              setRoutineCompletions(prev => ({
+                ...prev,
+                [dateString]: historicalData.routines || {}
+              }));
+            }
+          }
+        } catch (error) {
+          console.error('Error loading historical data:', error);
+          // Don't break the app if historical data loading fails
+        }
+      };
+      
+      loadHistoricalData();
+    }, [selectedDate]);
+    
     const activeGoal = getActiveGoal();
-    const todaysTodos = todos.filter(t => t.addedAt === getTodayString());
+    const todaysTodos = todos.filter(t => t.addedAt === getSelectedDateString(selectedDate));
     const weeklyFocus = getWeeklyFocus();
-    const orderedItems = getOrderedDashboardItems();
+    const orderedItems = getOrderedDashboardItemsForDate(selectedDate);
     
     return (
       <div className="space-y-4">
-        
-        {/* Date Display */}
-        <div className="bg-white rounded-xl shadow-md p-4">
-          <h2 className="text-lg font-bold text-[#333333] mb-2">Today</h2>
-          <p className="text-sm text-[#333333] opacity-70 font-mono">
-            {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }).toUpperCase()}
-          </p>
-          {currentUser && (
-            <p className="text-xs text-[#333333] opacity-50 font-mono mt-1">
-              User: {currentUser.name}
-            </p>
-          )}
-        </div>
-        
-        {/* Daily Quote */}
-        <div className="bg-white rounded-xl shadow-md p-6">
-          <p className="text-base leading-relaxed text-[#333333] font-serif italic">"{getDailyQuote()}"</p>
-        </div>
         
         {/* Weekly Focus */}
         <div className="bg-white p-5 rounded-xl shadow-md border-2 border-[#333333]">
@@ -3272,12 +3334,57 @@ const HabitGoalTracker = () => {
           <p className="text-sm text-[#333333]">{weeklyFocus.focus}</p>
         </div>
         
+        {/* Daily Quote */}
+        <div className="bg-white rounded-xl shadow-md p-6">
+          <p className="text-base leading-relaxed text-[#333333] font-serif italic">"{getDailyQuote()}"</p>
+        </div>
+        
+        {/* Date Navigator */}
+        <div className="bg-white rounded-xl shadow-md p-4">
+          <div className="flex items-center justify-between mb-3">
+            <button
+              onClick={() => changeDate(-1)}
+              className="p-2 hover:bg-stone-100 rounded-lg transition-colors"
+            >
+              <ChevronLeft size={24} strokeWidth={2.5} className="text-[#333333]" />
+            </button>
+            
+            <div className="text-center">
+              <p className="text-lg font-bold text-[#333333]">
+                {selectedDate.toLocaleDateString('en-US', { weekday: 'long' })}
+              </p>
+              <p className="text-sm text-[#333333] opacity-70 font-mono">
+                {selectedDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
+              </p>
+            </div>
+            
+            <button
+              onClick={() => changeDate(1)}
+              className="p-2 hover:bg-stone-100 rounded-lg transition-colors"
+              disabled={getSelectedDateString(selectedDate) === getSelectedDateString(new Date())}
+            >
+              <ChevronRight 
+                size={24} 
+                strokeWidth={2.5} 
+                className={getSelectedDateString(selectedDate) === getSelectedDateString(new Date()) ? "text-[#333333] opacity-30" : "text-[#333333]"} 
+              />
+            </button>
+          </div>
+          
+          <button
+            onClick={() => setSelectedDate(new Date())}
+            className="w-full py-2 bg-stone-100 text-[#333333] rounded-lg hover:bg-stone-200 font-bold uppercase text-xs tracking-wider transition-colors"
+          >
+            Today
+          </button>
+        </div>
+        
         {/* Ordered Dashboard Items */}
         {orderedItems.map((item, index) => {
           if (item.type === 'routine') {
             const routine = item.data;
             const isExpanded = expandedRoutines.has(routine.id);
-            const stats = getRoutineCompletionStats(routine.id);
+            const stats = getRoutineCompletionStats(routine.id, getSelectedDateString(selectedDate));
             
             return (
               <div key={routine.id} className="bg-white rounded-xl shadow-md">
@@ -3320,14 +3427,14 @@ const HabitGoalTracker = () => {
                       {routine.habits.map(habitId => {
                         const habit = habits.find(h => h.id === habitId);
                         if (!habit) return null;
-                        const isComplete = habitCompletions[getTodayString()]?.[habitId] || false;
+                        const isComplete = habitCompletions[getSelectedDateString(selectedDate)]?.[habitId] || false;
                         const streak = getHabitStreak(habitId);
                         
                         return (
                           <div
                             key={habitId}
                             className="flex items-center justify-between p-3 bg-stone-50 rounded-lg cursor-pointer hover:bg-stone-100 transition-colors"
-                            onClick={() => toggleHabitCompletion(habitId)}
+                            onClick={() => toggleHabitCompletion(habitId, getSelectedDateString(selectedDate))}
                           >
                             <div className="flex items-center gap-3">
                               {isComplete ? (
@@ -3339,9 +3446,9 @@ const HabitGoalTracker = () => {
                                 <span className={isComplete ? "line-through text-[#333333] opacity-50" : "text-[#333333] font-medium"}>
                                   {habit.name}
                                 </span>
-                                {isComplete && habitCompletionTimes[getTodayString()]?.[habitId] && (
+                                {isComplete && habitCompletionTimes[getSelectedDateString(selectedDate)]?.[habitId] && (
                                   <span className="text-xs text-green-600 font-mono">
-                                    Completed in {Math.round(habitCompletionTimes[getTodayString()][habitId] * 10) / 10}m
+                                    Completed in {Math.round(habitCompletionTimes[getSelectedDateString(selectedDate)][habitId] * 10) / 10}m
                                   </span>
                                 )}
                               </div>
@@ -3370,7 +3477,7 @@ const HabitGoalTracker = () => {
                                         onClick={(e) => {
                                           e.stopPropagation();
                                           stopTimer(habit.id, true);
-                                          toggleHabitCompletion(habit.id);
+                                          toggleHabitCompletion(habit.id, getSelectedDateString(selectedDate));
                                         }}
                                         className="p-1 hover:bg-green-100 rounded transition-colors"
                                         title="Complete Habit"
@@ -3434,7 +3541,7 @@ const HabitGoalTracker = () => {
                     
                     {/* Routine Completion Info */}
                     {(() => {
-                      const today = getTodayString();
+                      const today = getSelectedDateString(selectedDate);
                       const routineCompletion = routineCompletions[today]?.[routine.id];
                       if (routineCompletion && routineCompletion.completed) {
                         return (
@@ -3457,7 +3564,7 @@ const HabitGoalTracker = () => {
                     })()}
                     
                     {/* Start Routine Button */}
-                    {routine.habits.length > 0 && !stats.completed && (
+                    {routine.habits.length > 0 && !stats.completed && getSelectedDateString(selectedDate) === getSelectedDateString(new Date()) && (
                       <button
                         onClick={() => startRoutine(routine.id)}
                         disabled={activeRoutine !== null}
@@ -3473,7 +3580,7 @@ const HabitGoalTracker = () => {
             );
           } else if (item.type === 'habit') {
             const habit = item.data;
-            const isComplete = habitCompletions[getTodayString()]?.[habit.id] || false;
+            const isComplete = habitCompletions[getSelectedDateString(selectedDate)]?.[habit.id] || false;
             const streak = getHabitStreak(habit.id);
             
             return (
@@ -3482,7 +3589,7 @@ const HabitGoalTracker = () => {
                   <div className="flex items-center gap-3">
                     <div
                       className="cursor-pointer"
-                      onClick={() => toggleHabitCompletion(habit.id)}
+                      onClick={() => toggleHabitCompletion(habit.id, getSelectedDateString(selectedDate))}
                     >
                       {isComplete ? (
                         <CheckSquare className="text-[#333333]" size={24} strokeWidth={2.5} />
@@ -3499,9 +3606,9 @@ const HabitGoalTracker = () => {
                       {habit.description && (
                         <p className="text-sm text-[#333333] opacity-70">{habit.description}</p>
                       )}
-                      {isComplete && habitCompletionTimes[getTodayString()]?.[habit.id] && (
+                      {isComplete && habitCompletionTimes[getSelectedDateString(selectedDate)]?.[habit.id] && (
                         <span className="text-xs text-green-600 font-mono">
-                          Completed in {Math.round(habitCompletionTimes[getTodayString()][habit.id] * 10) / 10}m
+                          Completed in {Math.round(habitCompletionTimes[getSelectedDateString(selectedDate)][habit.id] * 10) / 10}m
                         </span>
                       )}
                     </div>
@@ -3528,7 +3635,7 @@ const HabitGoalTracker = () => {
                             <button
                               onClick={() => {
                                 stopTimer(habit.id, true);
-                                toggleHabitCompletion(habit.id);
+                                toggleHabitCompletion(habit.id, getSelectedDateString(selectedDate));
                               }}
                               className="p-1 hover:bg-green-100 rounded transition-colors"
                               title="Complete Habit"
@@ -3576,6 +3683,67 @@ const HabitGoalTracker = () => {
           return null;
         })}
         
+        {/* Routine Completions for Selected Date */}
+        {(() => {
+          const dayRoutineCompletions = getRoutineCompletionsForDate(selectedDate);
+          const routineIds = Object.keys(dayRoutineCompletions);
+          
+          if (routineIds.length > 0) {
+            return (
+              <div className="bg-white rounded-xl shadow-md p-4">
+                <h3 className="font-bold text-[#333333] mb-3 text-sm uppercase tracking-wide">Routine Completions</h3>
+                <div className="space-y-2">
+                  {routineIds.map(routineId => {
+                    const routine = routines.find(r => r.id === parseInt(routineId));
+                    const completion = dayRoutineCompletions[routineId];
+                    if (!routine || !completion) return null;
+                    
+                    return (
+                      <div key={routineId} className="p-3 bg-stone-50 rounded-lg">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="font-medium text-[#333333]">{routine.name}</span>
+                          <span className={`text-xs px-2 py-1 rounded font-mono ${
+                            completion.completed 
+                              ? 'bg-green-200 text-green-800' 
+                              : 'bg-orange-200 text-orange-800'
+                          }`}>
+                            {completion.completed ? 'Completed' : 'Abandoned'}
+                          </span>
+                        </div>
+                        <div className="text-sm text-[#333333] opacity-70">
+                          <div className="flex items-center gap-4 mb-1">
+                            <p>Actual: {Math.round(completion.totalTime * 10) / 10}m</p>
+                            {completion.estimatedTime && (
+                              <p>Estimated: {completion.estimatedTime}m</p>
+                            )}
+                            {completion.estimatedTime && (
+                              <p className={`font-medium ${
+                                completion.totalTime <= completion.estimatedTime 
+                                  ? 'text-green-600' 
+                                  : 'text-orange-600'
+                              }`}>
+                                {completion.totalTime <= completion.estimatedTime ? '✓' : '⚠'} 
+                                {Math.round(((completion.totalTime / completion.estimatedTime) - 1) * 100)}%
+                              </p>
+                            )}
+                          </div>
+                          {completion.startTime && (
+                            <p>Started: {new Date(completion.startTime).toLocaleTimeString()}</p>
+                          )}
+                          {completion.endTime && (
+                            <p>Ended: {new Date(completion.endTime).toLocaleTimeString()}</p>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          }
+          return null;
+        })()}
+
         {/* Active Goal */}
         {activeGoal && (
           <div className="bg-white rounded-xl shadow-md p-4">
@@ -3599,7 +3767,9 @@ const HabitGoalTracker = () => {
         
         {/* Daily Todo List */}
         <div className="bg-white rounded-xl shadow-md p-4">
-          <h3 className="font-bold text-[#333333] mb-3 text-sm uppercase tracking-wide">Today's Tasks</h3>
+          <h3 className="font-bold text-[#333333] mb-3 text-sm uppercase tracking-wide">
+            {getSelectedDateString(selectedDate) === getSelectedDateString(new Date()) ? "Today's Tasks" : "Tasks"}
+          </h3>
           <div className="space-y-2 mb-3">
             {todaysTodos.map(todo => (
               <div
@@ -3647,7 +3817,7 @@ const HabitGoalTracker = () => {
   };
   
   // Routines View
-  const RoutinesView = () => {
+  const RoutinesView = ({ selectedDate }) => {
     const [selectedRoutine, setSelectedRoutine] = useState(null);
     
     if (showHistory) {
@@ -3660,22 +3830,13 @@ const HabitGoalTracker = () => {
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <h2 className="text-2xl font-bold text-[#333333] uppercase tracking-wide">Routines & Habits</h2>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setShowSettings(true)}
-              className="p-2 hover:bg-stone-100 rounded-lg transition-colors"
-              title="Settings"
-            >
-              <Settings size={20} strokeWidth={2.5} className="text-[#333333] opacity-60" />
-            </button>
-            <button
-              onClick={() => setShowHistory(true)}
-              className="flex items-center gap-2 bg-black text-white px-4 py-2 rounded-lg hover:bg-[#333333] font-bold uppercase text-xs tracking-wider shadow-lg transition-all hover:shadow-xl hover:scale-105"
-            >
-              <TrendingUp size={18} strokeWidth={2.5} />
-              History
-            </button>
-          </div>
+          <button
+            onClick={() => setShowHistory(true)}
+            className="flex items-center gap-2 bg-black text-white px-4 py-2 rounded-lg hover:bg-[#333333] font-bold uppercase text-xs tracking-wider shadow-lg transition-all hover:shadow-xl hover:scale-105"
+          >
+            <TrendingUp size={18} strokeWidth={2.5} />
+            History
+          </button>
         </div>
         
         {/* Management Buttons */}
@@ -3753,7 +3914,7 @@ const HabitGoalTracker = () => {
                   >
                     <div 
                       className="flex-grow flex items-center gap-3 cursor-pointer"
-                      onClick={() => toggleHabitCompletion(habitId)}
+                      onClick={() => toggleHabitCompletion(habitId, getSelectedDateString(selectedDate))}
                     >
                       {isComplete ? (
                         <CheckSquare className="text-[#333333]" size={20} strokeWidth={2.5} />
@@ -3788,7 +3949,7 @@ const HabitGoalTracker = () => {
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   stopTimer(habit.id, true);
-                                  toggleHabitCompletion(habit.id);
+                                  toggleHabitCompletion(habit.id, getSelectedDateString(selectedDate));
                                 }}
                                 className="p-1 hover:bg-green-100 rounded transition-colors"
                                 title="Complete Habit"
@@ -3845,7 +4006,7 @@ const HabitGoalTracker = () => {
               )}
             </div>
             
-            {routine.habits.length > 0 && (
+            {routine.habits.length > 0 && getSelectedDateString(selectedDate) === getSelectedDateString(new Date()) && (
               <div className="mt-3">
                 <button
                   onClick={() => startRoutine(routine.id)}
@@ -3876,7 +4037,7 @@ const HabitGoalTracker = () => {
                   >
                     <div 
                       className="flex-grow flex items-center gap-3 cursor-pointer"
-                      onClick={() => toggleHabitCompletion(habit.id)}
+                      onClick={() => toggleHabitCompletion(habit.id, getSelectedDateString(selectedDate))}
                     >
                       {isComplete ? (
                         <CheckSquare className="text-[#333333]" size={20} strokeWidth={2.5} />
@@ -3919,7 +4080,7 @@ const HabitGoalTracker = () => {
                               <button
                                 onClick={() => {
                                   stopTimer(habit.id, true);
-                                  toggleHabitCompletion(habit.id);
+                                  toggleHabitCompletion(habit.id, getSelectedDateString(selectedDate));
                                 }}
                                 className="p-1 hover:bg-green-100 rounded transition-colors"
                                 title="Complete Habit"
@@ -3998,22 +4159,13 @@ const HabitGoalTracker = () => {
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <h2 className="text-2xl font-bold text-[#333333] uppercase tracking-wide">Goals</h2>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setShowSettings(true)}
-              className="p-2 hover:bg-stone-100 rounded-lg transition-colors"
-              title="Settings"
-            >
-              <Settings size={20} strokeWidth={2.5} className="text-[#333333] opacity-60" />
-            </button>
-            <button
-              onClick={() => setShowGoalModal(true)}
-              className="flex items-center gap-2 bg-black text-white px-5 py-2.5 rounded-lg hover:bg-[#333333] font-bold uppercase text-sm tracking-wider shadow-lg transition-all hover:shadow-xl hover:scale-105"
-            >
-              <Plus size={20} strokeWidth={2.5} />
-              New Goal
-            </button>
-          </div>
+          <button
+            onClick={() => setShowGoalModal(true)}
+            className="flex items-center gap-2 bg-black text-white px-5 py-2.5 rounded-lg hover:bg-[#333333] font-bold uppercase text-sm tracking-wider shadow-lg transition-all hover:shadow-xl hover:scale-105"
+          >
+            <Plus size={20} strokeWidth={2.5} />
+            New Goal
+          </button>
         </div>
         
         {goals.map(goal => (
@@ -4800,6 +4952,32 @@ const HabitGoalTracker = () => {
     );
   }
 
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-stone-50 to-stone-100 flex items-center justify-center p-4">
+        <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-8 text-center">
+          <div className="mb-6">
+            <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <AlertTriangle size={32} strokeWidth={2.5} className="text-red-600" />
+            </div>
+            <h1 className="text-2xl font-bold text-[#333333] mb-2">Loading Error</h1>
+            <p className="text-[#333333] opacity-70 mb-4">{error}</p>
+          </div>
+          
+          <div className="space-y-3">
+            <button
+              onClick={() => window.location.reload()}
+              className="w-full flex items-center justify-center gap-3 bg-[#333333] text-white py-4 rounded-lg hover:bg-black font-bold uppercase text-sm tracking-wider shadow-lg transition-all hover:shadow-xl hover:scale-[1.02]"
+            >
+              <RefreshCw size={20} strokeWidth={2.5} />
+              Retry
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-stone-50">
       <div className="max-w-md mx-auto">
@@ -4810,8 +4988,8 @@ const HabitGoalTracker = () => {
             <RoutineView />
           ) : (
             <div className="p-4">
-              {currentView === 'dashboard' && <DashboardView />}
-              {currentView === 'routines' && <RoutinesView />}
+              {currentView === 'dashboard' && <DashboardView selectedDate={selectedDate} setSelectedDate={setSelectedDate} />}
+              {currentView === 'routines' && <RoutinesView selectedDate={selectedDate} />}
               {currentView === 'goals' && <GoalsView />}
             </div>
           )}
@@ -4865,11 +5043,6 @@ const HabitGoalTracker = () => {
           />
         )}
 
-        {showSettings && (
-          <SettingsModal 
-            onClose={() => setShowSettings(false)} 
-          />
-        )}
 
         {showAddRoutineModal && (
           <AddRoutineModal 
