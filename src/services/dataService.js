@@ -391,6 +391,40 @@ class DataService {
     await this.updateDailyData(todayString, todayData);
   }
 
+  // Update today's active habit timers
+  async updateActiveHabitTimers(timers, todayString) {
+    const todayData = await this.getTodayData(todayString) || { habits: {}, routines: {}, todos: [] };
+    todayData.activeHabitTimers = timers;
+    await this.updateDailyData(todayString, todayData);
+  }
+
+  // Update today's active routine state
+  async updateActiveRoutine(routineState, todayString) {
+    const todayData = await this.getTodayData(todayString) || { habits: {}, routines: {}, todos: [] };
+    todayData.activeRoutine = routineState;
+    await this.updateDailyData(todayString, todayData);
+  }
+
+  // Get today's active habit timers
+  async getActiveHabitTimers(todayString) {
+    const todayData = await this.getTodayData(todayString);
+    return todayData?.activeHabitTimers || null;
+  }
+
+  // Get today's active routine state
+  async getActiveRoutine(todayString) {
+    const todayData = await this.getTodayData(todayString);
+    return todayData?.activeRoutine || null;
+  }
+
+  // Clear all active timers (for cleanup)
+  async clearActiveTimers(todayString) {
+    const todayData = await this.getTodayData(todayString) || { habits: {}, routines: {}, todos: [] };
+    delete todayData.activeHabitTimers;
+    delete todayData.activeRoutine;
+    await this.updateDailyData(todayString, todayData);
+  }
+
   // Initialize today's data if it doesn't exist
   async initializeTodayData(habits, routines, todayString) {
     const todayData = await this.getTodayData(todayString);
