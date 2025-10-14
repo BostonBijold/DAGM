@@ -12,7 +12,7 @@
     "firebase:serve": "firebase serve"
   },
   "dependencies": {
-    "firebase": "^12.3.0",
+    "firebase": "^12.4.0",
     "firebase-tools": "^14.19.1",
     "lucide-react": "^0.263.1",
     "react": "^18.2.0",

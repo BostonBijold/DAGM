@@ -114,6 +114,10 @@ const HabitGoalTracker = () => {
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [virtueCheckIns, setVirtueCheckIns] = useState({});
   const [expandedVirtues, setExpandedVirtues] = useState(false);
+  const [challenges, setChallenges] = useState([]);
+  const [dailyChallenges, setDailyChallenges] = useState({});
+  const [showChallengeModal, setShowChallengeModal] = useState(false);
+  const [currentChallenge, setCurrentChallenge] = useState(null);
   
   // Initialize data from data service
   useEffect(() => {
@@ -165,6 +169,29 @@ const HabitGoalTracker = () => {
     initializeApp();
   }, []);
 
+  // Load daily challenge when selected date changes
+  useEffect(() => {
+    const loadDailyChallenge = async () => {
+      if (!dataLoaded || challenges.length === 0) return;
+      
+      try {
+        const dateString = getSelectedDateString(selectedDate);
+        const dailyChallenge = await dataService.getDailyChallenge(dateString);
+        
+        if (dailyChallenge) {
+          setDailyChallenges(prev => ({
+            ...prev,
+            [dateString]: dailyChallenge
+          }));
+        }
+      } catch (error) {
+        console.error('Error loading daily challenge:', error);
+      }
+    };
+
+    loadDailyChallenge();
+  }, [selectedDate, dataLoaded, challenges]);
+
   // Timer update effect - updates every second when there are active or paused timers
   useEffect(() => {
     const hasActiveTimers = Object.keys(activeTimers).length > 0;
@@ -183,7 +210,7 @@ const HabitGoalTracker = () => {
   const loadUserData = async () => {
     try {
       const todayString = getTodayString();
-      const [routinesData, habitsData, goalsData, todosData, habitCompletionsData, habitCompletionTimesData, routineCompletionsData, settingsData, dashboardOrderData, virtueCheckInsData] = await Promise.all([
+      const [routinesData, habitsData, goalsData, todosData, habitCompletionsData, habitCompletionTimesData, routineCompletionsData, settingsData, dashboardOrderData, virtueCheckInsData, challengesData] = await Promise.all([
         dataService.getRoutines(),
         dataService.getHabits(),
         dataService.getGoals(),
@@ -193,7 +220,8 @@ const HabitGoalTracker = () => {
         dataService.getRoutineCompletions(),
         dataService.getUserSettings(),
         dataService.getDashboardOrder(),
-        dataService.getTodayVirtues(todayString)
+        dataService.getTodayVirtues(todayString),
+        dataService.getChallenges()
       ]);
       
       // Validate data arrays
@@ -213,6 +241,7 @@ const HabitGoalTracker = () => {
       setUserSettings(settingsData || {});
       setDashboardOrder(validatedDashboardOrder);
       setVirtueCheckIns({ [todayString]: virtueCheckInsData || {} });
+      setChallenges(challengesData || []);
       
       // Return the loaded data for validation
       return {
@@ -2177,6 +2206,90 @@ const HabitGoalTracker = () => {
     return weeklyFocuses[weekNumber % weeklyFocuses.length];
   };
 
+  // Get daily challenge for a specific date
+  const getDailyChallengeForDate = (date) => {
+    const weeklyFocus = getWeeklyFocus();
+    const dayOfWeek = date.getDay(); // 0 = Sunday, 1 = Monday, etc.
+    
+    if (challenges.length === 0) return null;
+    
+    const virtueChallenges = challenges.filter(c => c.virtue === weeklyFocus.virtue);
+    if (virtueChallenges.length === 0) return null;
+    
+    // Use day of week to select challenge (0-6)
+    const challengeIndex = dayOfWeek % virtueChallenges.length;
+    return virtueChallenges[challengeIndex];
+  };
+
+  // Get current daily challenge for selected date
+  const getCurrentDailyChallenge = () => {
+    const dateString = getSelectedDateString(selectedDate);
+    return dailyChallenges[dateString] || null;
+  };
+
+  // Accept daily challenge
+  const acceptDailyChallenge = async () => {
+    const dateString = getSelectedDateString(selectedDate);
+    const challenge = getDailyChallengeForDate(selectedDate);
+    
+    if (!challenge) return;
+    
+    const challengeData = {
+      challengeId: challenge.id,
+      virtue: challenge.virtue,
+      challenge: challenge.challenge,
+      difficulty: challenge.difficulty,
+      accepted: true,
+      completed: false,
+      acceptedAt: new Date().toISOString(),
+      completedAt: null
+    };
+    
+    try {
+      await dataService.updateDailyChallenge(dateString, challengeData);
+      setDailyChallenges(prev => ({
+        ...prev,
+        [dateString]: challengeData
+      }));
+      setShowChallengeModal(false);
+    } catch (error) {
+      console.error('Error accepting challenge:', error);
+    }
+  };
+
+  // Complete daily challenge
+  const completeDailyChallenge = async () => {
+    const dateString = getSelectedDateString(selectedDate);
+    const currentChallenge = getCurrentDailyChallenge();
+    
+    if (!currentChallenge) return;
+    
+    const updatedChallenge = {
+      ...currentChallenge,
+      completed: true,
+      completedAt: new Date().toISOString()
+    };
+    
+    try {
+      await dataService.updateDailyChallenge(dateString, updatedChallenge);
+      setDailyChallenges(prev => ({
+        ...prev,
+        [dateString]: updatedChallenge
+      }));
+    } catch (error) {
+      console.error('Error completing challenge:', error);
+    }
+  };
+
+  // Show challenge modal
+  const showChallenge = () => {
+    const challenge = getDailyChallengeForDate(selectedDate);
+    if (challenge) {
+      setCurrentChallenge(challenge);
+      setShowChallengeModal(true);
+    }
+  };
+
   // Check if user can check in for a specific date (today or yesterday only)
   const canCheckInForDate = (date) => {
     const today = new Date();
@@ -3566,7 +3679,69 @@ const HabitGoalTracker = () => {
         <div className="bg-white p-5 rounded-xl shadow-md border-2 border-[#333333]">
           <h3 className="font-bold text-[#333333] opacity-70 mb-2 tracking-wider text-sm uppercase">This Week's Virtue</h3>
           <p className="text-xl font-bold mb-1 text-[#333333]">{weeklyFocus.virtue}</p>
-          <p className="text-sm text-[#333333]">{weeklyFocus.focus}</p>
+          <p className="text-sm text-[#333333] mb-4">{weeklyFocus.focus}</p>
+          
+          {/* Daily Challenge Section */}
+          {(() => {
+            const currentChallenge = getCurrentDailyChallenge();
+            const canEdit = canCheckInForDate(selectedDate);
+            
+            if (!currentChallenge || !currentChallenge.accepted) {
+              // Show challenge button if not accepted yet
+              return (
+                <div className="mt-4 pt-4 border-t border-gray-200">
+                  <button
+                    onClick={showChallenge}
+                    disabled={!canEdit}
+                    className="w-full bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed font-medium transition-colors"
+                  >
+                    {canEdit ? 'Daily Challenge' : 'Challenge (View Only)'}
+                  </button>
+                </div>
+              );
+            } else if (currentChallenge.accepted && !currentChallenge.completed) {
+              // Show challenge description with complete button
+              return (
+                <div className="mt-4 pt-4 border-t border-gray-200">
+                  <div className="bg-blue-50 p-3 rounded-lg mb-3">
+                    <p className="text-sm font-medium text-blue-800 mb-1">Today's Challenge:</p>
+                    <p className="text-sm text-blue-700">{currentChallenge.challenge}</p>
+                    <span className={`inline-block px-2 py-1 text-xs font-medium rounded-full mt-2 ${
+                      currentChallenge.difficulty === 'easy' ? 'bg-green-100 text-green-800' :
+                      currentChallenge.difficulty === 'medium' ? 'bg-yellow-100 text-yellow-800' :
+                      'bg-red-100 text-red-800'
+                    }`}>
+                      {currentChallenge.difficulty}
+                    </span>
+                  </div>
+                  <button
+                    onClick={completeDailyChallenge}
+                    disabled={!canEdit}
+                    className="w-full bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed font-medium transition-colors"
+                  >
+                    {canEdit ? 'Mark Complete' : 'Completed'}
+                  </button>
+                </div>
+              );
+            } else if (currentChallenge.completed) {
+              // Show completed challenge
+              return (
+                <div className="mt-4 pt-4 border-t border-gray-200">
+                  <div className="bg-green-50 p-3 rounded-lg">
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="text-green-600 text-lg">✓</span>
+                      <p className="text-sm font-medium text-green-800">Challenge Completed!</p>
+                    </div>
+                    <p className="text-sm text-green-700">{currentChallenge.challenge}</p>
+                    <p className="text-xs text-green-600 mt-1">
+                      Completed at {new Date(currentChallenge.completedAt).toLocaleTimeString()}
+                    </p>
+                  </div>
+                </div>
+              );
+            }
+            return null;
+          })()}
         </div>
         
         
@@ -5486,6 +5661,55 @@ const HabitGoalTracker = () => {
                 </button>
               </div>
 
+              {/* Week Summary Stats */}
+              <div className="bg-white rounded-xl shadow-md p-4">
+                <h3 className="font-bold text-[#333333] mb-3 text-sm uppercase tracking-wide">Week Summary</h3>
+                <div className="grid grid-cols-3 gap-4">
+                  {(() => {
+                    const weekDays = getWeekDays(currentWeekStart);
+                    const weekData = getVirtueDataForWeek(currentWeekStart);
+                    
+                    // Calculate virtue check-ins
+                    let totalVirtueChecks = 0;
+                    let completedVirtueChecks = 0;
+                    weekDays.forEach(date => {
+                      const dateStr = date.toISOString().split('T')[0];
+                      const virtues = weekData[dateStr] || {};
+                      const checked = Object.values(virtues).filter(Boolean).length;
+                      if (checked > 0) completedVirtueChecks++;
+                      totalVirtueChecks++;
+                    });
+                    
+                    // Calculate challenge completions
+                    let completedChallenges = 0;
+                    weekDays.forEach(date => {
+                      const dateStr = date.toISOString().split('T')[0];
+                      const challenge = dailyChallenges[dateStr];
+                      if (challenge?.completed) completedChallenges++;
+                    });
+                    
+                    const virtueRate = totalVirtueChecks > 0 ? Math.round((completedVirtueChecks / totalVirtueChecks) * 100) : 0;
+                    
+                    return (
+                      <>
+                        <div className="text-center p-3 bg-stone-50 rounded-lg">
+                          <p className="text-2xl font-bold text-[#333333] font-mono">{virtueRate}%</p>
+                          <p className="text-xs text-[#333333] opacity-70 uppercase tracking-wider mt-1">Virtue Rate</p>
+                        </div>
+                        <div className="text-center p-3 bg-stone-50 rounded-lg">
+                          <p className="text-2xl font-bold text-[#333333] font-mono">{completedVirtueChecks}</p>
+                          <p className="text-xs text-[#333333] opacity-70 uppercase tracking-wider mt-1">Days Checked</p>
+                        </div>
+                        <div className="text-center p-3 bg-blue-50 rounded-lg border-2 border-blue-200">
+                          <p className="text-2xl font-bold text-blue-800 font-mono">{completedChallenges}</p>
+                          <p className="text-xs text-blue-800 uppercase tracking-wider mt-1">Challenges</p>
+                        </div>
+                      </>
+                    );
+                  })()}
+                </div>
+              </div>
+
               {/* Weekly Virtue Grid */}
               <div className="bg-white rounded-xl shadow-md p-4">
                 <h3 className="font-bold text-[#333333] mb-4 text-sm uppercase tracking-wide">Weekly Virtue Grid</h3>
@@ -5535,6 +5759,28 @@ const HabitGoalTracker = () => {
                           </tr>
                         );
                       })}
+                      {/* Challenges Row */}
+                      <tr className="border-t-2 border-stone-300 bg-blue-50">
+                        <td className="p-2 font-bold text-[#333333] text-sm">
+                          Daily Challenges
+                        </td>
+                        {getWeekDays(currentWeekStart).map((date, dayIndex) => {
+                          const dateStr = date.toISOString().split('T')[0];
+                          const dailyChallenge = dailyChallenges[dateStr];
+                          const isToday = date.toDateString() === new Date().toDateString();
+                          const isCompleted = dailyChallenge?.completed === true;
+                          
+                          return (
+                            <td key={dayIndex} className={`text-center p-2 ${isToday ? 'bg-blue-100' : ''}`}>
+                              {isCompleted ? (
+                                <span className="text-blue-600 text-lg font-bold">✓</span>
+                              ) : (
+                                <span className="text-stone-300 text-lg">○</span>
+                              )}
+                            </td>
+                          );
+                        })}
+                      </tr>
                     </tbody>
                   </table>
                 </div>
@@ -5969,7 +6215,38 @@ const HabitGoalTracker = () => {
                       })}
                     </div>
 
-                    <div className="flex justify-between items-center">
+                    {/* Daily Challenge Section */}
+                    {(() => {
+                      const dateString = getSelectedDateString(selectedDate);
+                      const dailyChallenge = dailyChallenges[dateString];
+                      
+                      if (dailyChallenge && dailyChallenge.completed) {
+                        return (
+                          <div className="mt-6 p-4 bg-blue-50 border-2 border-blue-200 rounded-lg">
+                            <div className="flex items-center gap-2 mb-2">
+                              <span className="text-blue-600 text-xl">✓</span>
+                              <p className="text-sm font-bold text-blue-800">Daily Challenge Completed!</p>
+                            </div>
+                            <p className="text-sm text-blue-700 mb-1">{dailyChallenge.challenge}</p>
+                            <div className="flex items-center gap-2 mt-2">
+                              <span className={`inline-block px-2 py-1 text-xs font-medium rounded-full ${
+                                dailyChallenge.difficulty === 'easy' ? 'bg-green-100 text-green-800' :
+                                dailyChallenge.difficulty === 'medium' ? 'bg-yellow-100 text-yellow-800' :
+                                'bg-red-100 text-red-800'
+                              }`}>
+                                {dailyChallenge.difficulty}
+                              </span>
+                              <p className="text-xs text-blue-600">
+                                Completed at {new Date(dailyChallenge.completedAt).toLocaleTimeString()}
+                              </p>
+                            </div>
+                          </div>
+                        );
+                      }
+                      return null;
+                    })()}
+
+                    <div className="flex justify-between items-center mt-6">
                       <button
                         onClick={goBackToVirtues}
                         className="px-6 py-3 rounded-lg bg-gray-100 text-gray-700 font-medium hover:bg-gray-200 transition-colors"
@@ -5986,6 +6263,52 @@ const HabitGoalTracker = () => {
                     </div>
                   </div>
                 )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Challenge Modal */}
+        {showChallengeModal && currentChallenge && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
+              <div className="p-6">
+                <h3 className="text-2xl font-bold text-[#333333] mb-4">Today's Daily Challenge</h3>
+                
+                <div className="mb-6">
+                  <div className="bg-blue-50 p-4 rounded-lg mb-4">
+                    <p className="text-lg font-medium text-blue-900 mb-3">{currentChallenge.challenge}</p>
+                    <div className="flex items-center gap-3">
+                      <span className="text-sm text-blue-700">Virtue: <strong>{currentChallenge.virtue}</strong></span>
+                      <span className={`inline-block px-3 py-1 text-sm font-medium rounded-full ${
+                        currentChallenge.difficulty === 'easy' ? 'bg-green-100 text-green-800' :
+                        currentChallenge.difficulty === 'medium' ? 'bg-yellow-100 text-yellow-800' :
+                        'bg-red-100 text-red-800'
+                      }`}>
+                        {currentChallenge.difficulty}
+                      </span>
+                    </div>
+                  </div>
+                  
+                  <p className="text-sm text-gray-600 mb-4">
+                    Accept this challenge to practice today's virtue. You can mark it complete when you've accomplished it.
+                  </p>
+                </div>
+                
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => setShowChallengeModal(false)}
+                    className="flex-1 px-6 py-3 rounded-lg bg-gray-200 text-gray-700 font-medium hover:bg-gray-300 transition-colors"
+                  >
+                    Not Today
+                  </button>
+                  <button
+                    onClick={acceptDailyChallenge}
+                    className="flex-1 px-6 py-3 rounded-lg bg-blue-600 text-white font-medium hover:bg-blue-700 transition-colors"
+                  >
+                    Accept Challenge
+                  </button>
+                </div>
               </div>
             </div>
           </div>
