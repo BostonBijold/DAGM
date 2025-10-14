@@ -256,6 +256,73 @@ class DataService {
     return todayData?.virtueCheckIns || {};
   }
 
+  // Get today's daily challenge
+  async getTodayDailyChallenge(todayString) {
+    const todayData = await this.getTodayData(todayString);
+    return todayData?.dailyChallenge || null;
+  }
+
+  // Get daily challenge for a specific date
+  async getDailyChallenge(dateString) {
+    const dailyData = await this.getDailyData(dateString);
+    return dailyData?.dailyChallenge || null;
+  }
+
+  // Update today's daily challenge
+  async updateTodayDailyChallenge(challengeData, todayString) {
+    const todayData = await this.getTodayData(todayString) || { habits: {}, routines: {}, todos: [], virtueCheckIns: {} };
+    todayData.dailyChallenge = challengeData;
+    await this.updateDailyData(todayString, todayData);
+  }
+
+  // Update daily challenge for a specific date
+  async updateDailyChallenge(dateString, challengeData) {
+    const dailyData = await this.getDailyData(dateString) || { habits: {}, routines: {}, todos: [], virtueCheckIns: {} };
+    dailyData.dailyChallenge = challengeData;
+    await this.updateDailyData(dateString, dailyData);
+  }
+
+  // Get all challenges from Firestore
+  async getChallenges() {
+    try {
+      if (!isFirebaseAvailable()) {
+        throw new Error('Firebase is not configured. Please set up your Firebase project.');
+      }
+
+      const challengesRef = collection(db, 'dailyChallenges');
+      const challengesSnapshot = await getDocs(challengesRef);
+      
+      const challenges = [];
+      challengesSnapshot.forEach((doc) => {
+        challenges.push({ id: doc.id, ...doc.data() });
+      });
+      
+      return challenges;
+    } catch (error) {
+      console.error('Error getting challenges:', error);
+      throw new Error('Failed to load challenges. Please try again.');
+    }
+  }
+
+  // Get daily challenge for a specific virtue and day of week
+  async getDailyChallengeForVirtue(virtue, dayOfWeek) {
+    try {
+      const challenges = await this.getChallenges();
+      const virtueChallenges = challenges.filter(c => c.virtue === virtue);
+      
+      if (virtueChallenges.length === 0) {
+        return null;
+      }
+      
+      // Use day of week (0-6) to select challenge (0-6)
+      const challengeIndex = dayOfWeek % virtueChallenges.length;
+      return virtueChallenges[challengeIndex];
+    } catch (error) {
+      console.error('Error getting daily challenge for virtue:', error);
+      return null;
+    }
+  }
+
   // Specific Data Setters
   async updateRoutines(routines) {
     const userData = await this.getCurrentUserData();
@@ -335,7 +402,17 @@ class DataService {
         routines: {},
         todos: [],
         habitCompletionTimes: {},
-        virtueCheckIns: {}
+        virtueCheckIns: {},
+        dailyChallenge: {
+          challengeId: null,
+          virtue: null,
+          challenge: null,
+          difficulty: null,
+          accepted: false,
+          completed: false,
+          acceptedAt: null,
+          completedAt: null
+        }
       };
       
       // Initialize all habits as incomplete
