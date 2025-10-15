@@ -93,7 +93,7 @@ class DataService {
           habits: [],
           goals: [],
           todos: [],
-          dailyData: {}, // { "2024-01-15": { habits: {}, routines: {}, todos: [], virtueCheckIns: {} } }
+          dailyData: {}, // { "2024-01-15": { habitCompletions: {}, routineCompletions: {}, todos: [], virtueCheckIns: {} } }
           dashboardOrder: [] // Array of {type: 'routine'|'habit', id: number, order: number}
         }
       };
@@ -218,26 +218,86 @@ class DataService {
   // Get today's date string in browser timezone
   getTodayString() {
     const now = new Date();
-    return now.toISOString().split('T')[0];
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
   }
 
-  // Legacy methods for backward compatibility (will be removed)
+  // Get all habit completions across all dates
+  async getAllHabitCompletions() {
+    try {
+      const userData = await this.getCurrentUserData();
+      if (!userData) return {};
+      
+      // Return the dailyData structure which contains habitCompletions for each date
+      return userData.data.dailyData || {};
+    } catch (error) {
+      console.error('Error getting all habit completions:', error);
+      return {};
+    }
+  }
+
+  // Get all habit completion times across all dates
+  async getAllHabitCompletionTimes() {
+    // Habit completion tracking removed - return empty data
+    return {};
+  }
+
+  // Get all routine completions across all dates
+  async getAllRoutineCompletions() {
+    try {
+      const userData = await this.getCurrentUserData();
+      if (!userData) return {};
+      
+      // Return the dailyData structure which contains routineCompletions for each date
+      return userData.data.dailyData || {};
+    } catch (error) {
+      console.error('Error getting all routine completions:', error);
+      return {};
+    }
+  }
+
+  // Get habit completions for today
   async getHabitCompletions() {
     const today = this.getTodayString();
     const todayData = await this.getTodayData(today);
-    return todayData?.habits || {};
+    return todayData?.habitCompletions || {};
   }
 
   async getHabitCompletionTimes() {
-    const today = this.getTodayString();
-    const todayData = await this.getTodayData(today);
-    return todayData?.habitCompletionTimes || {};
+    // DEPRECATED - use getHabitCompletions() instead
+    console.warn('getHabitCompletionTimes is deprecated. Use getHabitCompletions() for unified completion data.');
+    return {};
   }
 
   async getRoutineCompletions() {
     const today = this.getTodayString();
     const todayData = await this.getTodayData(today);
-    return todayData?.routines || {};
+    return todayData?.routineCompletions || {};
+  }
+
+  // Helper methods for unified completion data
+  async getHabitCompletion(habitId, dateString) {
+    const today = dateString || this.getTodayString();
+    const todayData = await this.getTodayData(today);
+    return todayData?.habitCompletions?.[habitId] || null;
+  }
+
+  async isHabitComplete(habitId, dateString) {
+    const completion = await this.getHabitCompletion(habitId, dateString);
+    return completion?.completed || false;
+  }
+
+  async getRoutineCompletion(routineId, dateString) {
+    const today = dateString || this.getTodayString();
+    const todayData = await this.getTodayData(today);
+    return todayData?.routineCompletions?.[routineId] || null;
+  }
+
+  async isRoutineComplete(routineId, dateString) {
+    const completion = await this.getRoutineCompletion(routineId, dateString);
+    return completion?.completed || false;
   }
 
   async getUserSettings() {
@@ -270,14 +330,14 @@ class DataService {
 
   // Update today's daily challenge
   async updateTodayDailyChallenge(challengeData, todayString) {
-    const todayData = await this.getTodayData(todayString) || { habits: {}, routines: {}, todos: [], virtueCheckIns: {} };
+    const todayData = await this.getTodayData(todayString) || { habitCompletions: {}, routineCompletions: {}, todos: [], virtueCheckIns: {} };
     todayData.dailyChallenge = challengeData;
     await this.updateDailyData(todayString, todayData);
   }
 
   // Update daily challenge for a specific date
   async updateDailyChallenge(dateString, challengeData) {
-    const dailyData = await this.getDailyData(dateString) || { habits: {}, routines: {}, todos: [], virtueCheckIns: {} };
+    const dailyData = await this.getDailyData(dateString) || { habitCompletions: {}, routineCompletions: {}, todos: [], virtueCheckIns: {} };
     dailyData.dailyChallenge = challengeData;
     await this.updateDailyData(dateString, dailyData);
   }
@@ -357,50 +417,81 @@ class DataService {
   }
 
   // Update today's habit completions
-  async updateTodayHabits(habits, todayString) {
-    const todayData = await this.getTodayData(todayString) || { habits: {}, routines: {}, todos: [] };
-    todayData.habits = habits;
-    await this.updateDailyData(todayString, todayData);
+  async updateTodayHabits(habitCompletions, todayString) {
+    try {
+      if (!this.isOnline()) {
+        throw new Error('No internet connection. Changes will be saved when you reconnect.');
+      }
+
+      const todayData = await this.getTodayData(todayString) || { 
+        habitCompletions: {}, 
+        routineCompletions: {}, 
+        todos: [], 
+        virtueCheckIns: {} 
+      };
+      
+      // Merge new habit completion data with existing data
+      todayData.habitCompletions = { ...todayData.habitCompletions, ...habitCompletions };
+      await this.updateDailyData(todayString, todayData);
+    } catch (error) {
+      console.error('Error updating habit completions:', error);
+      throw error;
+    }
   }
 
-  // Update today's habit completion times
+  // Update today's habit completion times (DEPRECATED - use updateTodayHabits instead)
   async updateTodayHabitTimes(habitTimes, todayString) {
-    const todayData = await this.getTodayData(todayString) || { habits: {}, routines: {}, todos: [] };
-    todayData.habitCompletionTimes = habitTimes;
-    await this.updateDailyData(todayString, todayData);
+    console.warn('updateTodayHabitTimes is deprecated. Use updateTodayHabits with unified completion objects.');
+    return;
   }
 
   // Update today's routine completions
-  async updateTodayRoutines(routines, todayString) {
-    const todayData = await this.getTodayData(todayString) || { habits: {}, routines: {}, todos: [] };
-    todayData.routines = routines;
-    await this.updateDailyData(todayString, todayData);
+  async updateTodayRoutines(routineCompletions, todayString) {
+    try {
+      if (!this.isOnline()) {
+        throw new Error('No internet connection. Changes will be saved when you reconnect.');
+      }
+
+      const todayData = await this.getTodayData(todayString) || { 
+        habitCompletions: {}, 
+        routineCompletions: {}, 
+        todos: [], 
+        virtueCheckIns: {} 
+      };
+      
+      // Merge new routine completion data with existing data
+      todayData.routineCompletions = { ...todayData.routineCompletions, ...routineCompletions };
+      await this.updateDailyData(todayString, todayData);
+    } catch (error) {
+      console.error('Error updating routine completions:', error);
+      throw error;
+    }
   }
 
   // Update today's todos
   async updateTodayTodos(todos, todayString) {
-    const todayData = await this.getTodayData(todayString) || { habits: {}, routines: {}, todos: [] };
+    const todayData = await this.getTodayData(todayString) || { habitCompletions: {}, routineCompletions: {}, todos: [] };
     todayData.todos = todos;
     await this.updateDailyData(todayString, todayData);
   }
 
   // Update today's virtue check-ins
   async updateTodayVirtues(virtues, todayString) {
-    const todayData = await this.getTodayData(todayString) || { habits: {}, routines: {}, todos: [], virtueCheckIns: {} };
+    const todayData = await this.getTodayData(todayString) || { habitCompletions: {}, routineCompletions: {}, todos: [], virtueCheckIns: {} };
     todayData.virtueCheckIns = virtues;
     await this.updateDailyData(todayString, todayData);
   }
 
   // Update today's active habit timers
   async updateActiveHabitTimers(timers, todayString) {
-    const todayData = await this.getTodayData(todayString) || { habits: {}, routines: {}, todos: [] };
+    const todayData = await this.getTodayData(todayString) || { habitCompletions: {}, routineCompletions: {}, todos: [] };
     todayData.activeHabitTimers = timers;
     await this.updateDailyData(todayString, todayData);
   }
 
   // Update today's active routine state
   async updateActiveRoutine(routineState, todayString) {
-    const todayData = await this.getTodayData(todayString) || { habits: {}, routines: {}, todos: [] };
+    const todayData = await this.getTodayData(todayString) || { habitCompletions: {}, routineCompletions: {}, todos: [] };
     todayData.activeRoutine = routineState;
     await this.updateDailyData(todayString, todayData);
   }
@@ -419,7 +510,7 @@ class DataService {
 
   // Clear all active timers (for cleanup)
   async clearActiveTimers(todayString) {
-    const todayData = await this.getTodayData(todayString) || { habits: {}, routines: {}, todos: [] };
+    const todayData = await this.getTodayData(todayString) || { habitCompletions: {}, routineCompletions: {}, todos: [] };
     delete todayData.activeHabitTimers;
     delete todayData.activeRoutine;
     await this.updateDailyData(todayString, todayData);
@@ -430,12 +521,11 @@ class DataService {
     const todayData = await this.getTodayData(todayString);
     
     if (!todayData) {
-      // Create fresh daily data with all habits/routines marked as incomplete
+      // Create fresh daily data with empty habit/routine completions - they will be added as needed
       const newDailyData = {
-        habits: {},
-        routines: {},
+        habitCompletions: {},
+        routineCompletions: {},
         todos: [],
-        habitCompletionTimes: {},
         virtueCheckIns: {},
         dailyChallenge: {
           challengeId: null,
@@ -449,14 +539,16 @@ class DataService {
         }
       };
       
-      // Initialize all habits as incomplete
-      habits.forEach(habit => {
-        newDailyData.habits[habit.id] = false;
-      });
-      
-      // Initialize all routines as incomplete
+      // Only initialize routines as incomplete (habits will be added when first interacted with)
       routines.forEach(routine => {
-        newDailyData.routines[routine.id] = false;
+        newDailyData.routineCompletions[routine.id] = {
+          completed: false,
+          completedAt: null,
+          totalDuration: null,
+          startTime: null,
+          endTime: null,
+          habitTimes: {}
+        };
       });
       
       await this.updateDailyData(todayString, newDailyData);
@@ -732,6 +824,55 @@ class DataService {
   // Clear all data (for testing/reset) - Note: This only clears local state, not Firestore
   clearAllData() {
     console.warn('clearAllData() is not supported in Firestore mode. Data is stored in the cloud.');
+  }
+
+  // Migrate data to new unified completion structure
+  async migrateToNewStructure() {
+    try {
+      const userData = await this.getCurrentUserData();
+      if (!userData) return false;
+
+      console.log('Starting data migration to unified completion structure...');
+      
+      // Migrate dailyData
+      const migratedDailyData = {};
+      Object.keys(userData.data.dailyData || {}).forEach(date => {
+        const dayData = userData.data.dailyData[date];
+        
+        migratedDailyData[date] = {
+          habitCompletions: {},
+          routineCompletions: {},
+          todos: dayData.todos || [],
+          virtueCheckIns: dayData.virtueCheckIns || {},
+          dailyChallenge: dayData.dailyChallenge || {}
+        };
+        
+        // Merge habits and habitCompletionTimes into habitCompletions
+        Object.keys(dayData.habits || {}).forEach(habitId => {
+          const timeData = dayData.habitCompletionTimes?.[habitId];
+          migratedDailyData[date].habitCompletions[habitId] = {
+            completed: dayData.habits[habitId],
+            completedAt: timeData?.endTime || null,
+            duration: timeData?.duration || null,
+            startTime: timeData?.startTime || null,
+            endTime: timeData?.endTime || null,
+            notes: ""
+          };
+        });
+        
+        // Copy routines as-is (already structured)
+        migratedDailyData[date].routineCompletions = dayData.routines || {};
+      });
+      
+      userData.data.dailyData = migratedDailyData;
+      await this.updateUserData(userData.data);
+      
+      console.log('Data migration completed successfully!');
+      return true;
+    } catch (error) {
+      console.error('Error during data migration:', error);
+      return false;
+    }
   }
 }
 

@@ -111,13 +111,12 @@ const HabitGoalTracker = () => {
   const [habits, setHabits] = useState([]);
   const [goals, setGoals] = useState([]);
   const [todos, setTodos] = useState([]);
-  const [habitCompletions, setHabitCompletions] = useState({});
-  const [habitCompletionTimes, setHabitCompletionTimes] = useState({});
+  const [habitCompletions, setHabitCompletions] = useState({}); // Now contains full completion objects
   const [activeRoutine, setActiveRoutine] = useState(null); // Currently running routine
   const [activeRoutineIndex, setActiveRoutineIndex] = useState(0); // Current habit index
   const [routineStartTime, setRoutineStartTime] = useState(null);
   const [routinePaused, setRoutinePaused] = useState(false);
-  const [routineCompletions, setRoutineCompletions] = useState({});
+  const [routineCompletions, setRoutineCompletions] = useState({}); // Now contains full completion objects
   const [expandedRoutines, setExpandedRoutines] = useState(new Set());
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [virtueCheckIns, setVirtueCheckIns] = useState({});
@@ -218,14 +217,13 @@ const HabitGoalTracker = () => {
   const loadUserData = async () => {
     try {
       const todayString = getTodayString();
-      const [routinesData, habitsData, goalsData, todosData, habitCompletionsData, habitCompletionTimesData, routineCompletionsData, settingsData, dashboardOrderData, virtueCheckInsData, challengesData] = await Promise.all([
+      const [routinesData, habitsData, goalsData, todosData, habitCompletionsData, routineCompletionsData, settingsData, dashboardOrderData, virtueCheckInsData, challengesData] = await Promise.all([
         dataService.getRoutines(),
         dataService.getHabits(),
         dataService.getGoals(),
         dataService.getTodos(),
-        dataService.getHabitCompletions(),
-        dataService.getHabitCompletionTimes(),
-        dataService.getRoutineCompletions(),
+        dataService.getAllHabitCompletions(),
+        dataService.getAllRoutineCompletions(),
         dataService.getUserSettings(),
         dataService.getDashboardOrder(),
         dataService.getTodayVirtues(todayString),
@@ -243,9 +241,28 @@ const HabitGoalTracker = () => {
       setHabits(validatedHabits);
       setGoals(validatedGoals);
       setTodos(validatedTodos);
-      setHabitCompletions(habitCompletionsData || {});
-      setHabitCompletionTimes(habitCompletionTimesData || {});
-      setRoutineCompletions(routineCompletionsData || {});
+      
+      // Process habit completions (now unified structure)
+      const processedHabitCompletions = {};
+      if (habitCompletionsData) {
+        Object.keys(habitCompletionsData).forEach(date => {
+          if (habitCompletionsData[date]?.habitCompletions) {
+            processedHabitCompletions[date] = habitCompletionsData[date].habitCompletions;
+          }
+        });
+      }
+      setHabitCompletions(processedHabitCompletions);
+      
+      // Process routine completions (now unified structure)
+      const processedRoutineCompletions = {};
+      if (routineCompletionsData) {
+        Object.keys(routineCompletionsData).forEach(date => {
+          if (routineCompletionsData[date]?.routineCompletions) {
+            processedRoutineCompletions[date] = routineCompletionsData[date].routineCompletions;
+          }
+        });
+      }
+      setRoutineCompletions(processedRoutineCompletions);
       setUserSettings(settingsData || {});
       setDashboardOrder(validatedDashboardOrder);
       setVirtueCheckIns({ [todayString]: virtueCheckInsData || {} });
@@ -344,10 +361,19 @@ const HabitGoalTracker = () => {
         throw new Error('Invalid today\'s data structure');
       }
       
-      // Update local state with today's data
-      setHabitCompletions(todayData.habits || {});
-      setHabitCompletionTimes(todayData.habitCompletionTimes || {});
-      setRoutineCompletions(todayData.routines || {});
+      // Only update if we don't already have today's data loaded
+      if (!habitCompletions[today]) {
+        setHabitCompletions(prev => ({
+          ...prev,
+          [today]: todayData.habitCompletions || {}
+        }));
+      }
+      if (!routineCompletions[today]) {
+        setRoutineCompletions(prev => ({
+          ...prev,
+          [today]: todayData.routineCompletions || {}
+        }));
+      }
       
       // Update todos (combine persistent todos with today's todos)
       const persistentTodos = await dataService.getTodos();
@@ -402,15 +428,17 @@ const HabitGoalTracker = () => {
   // Get today's date string in browser timezone
   const getTodayString = () => {
     const now = new Date();
-    return now.toISOString().split('T')[0];
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
   };
 
   // Helper function to get completion time display
   const getCompletionTimeDisplay = (habitId, dateString) => {
-    const timeData = habitCompletionTimes[dateString]?.[habitId];
-    if (!timeData) return null;
-    const duration = typeof timeData === 'object' ? timeData.duration : timeData;
-    return Math.round(duration * 10) / 10;
+    const completion = habitCompletions[dateString]?.[habitId];
+    if (!completion) return null;
+    return completion.duration ? Math.round(completion.duration * 10) / 10 : null;
   };
 
   // Get date string for selected date
@@ -2191,10 +2219,10 @@ const HabitGoalTracker = () => {
     
   // Get habit completion status
   const getHabitStatus = (habitId) => {
-    const isComplete = habitCompletions[today]?.[habitId] || false;
-    const habitTimeData = habitCompletionTimes[today]?.[habitId];
-    const habitTime = typeof habitTimeData === 'object' ? habitTimeData.duration : habitTimeData;
-    return { isComplete, habitTime, habitTimeData };
+    const completion = habitCompletions[today]?.[habitId];
+    const isComplete = completion?.completed || false;
+    const habitTime = completion?.duration || null;
+    return { isComplete, habitTime, habitTimeData: completion };
   };
 
     // Initialize virtue check-in state when virtue habit becomes active
@@ -2416,7 +2444,7 @@ const HabitGoalTracker = () => {
 
   // Accept daily challenge
   const acceptDailyChallenge = async () => {
-    const dateString = getSelectedDateString(selectedDate);
+    const todayString = getTodayString(); // Always use today's date for challenges
     const challenge = getDailyChallengeForDate(selectedDate);
     
     if (!challenge) return;
@@ -2428,15 +2456,15 @@ const HabitGoalTracker = () => {
       difficulty: challenge.difficulty,
       accepted: true,
       completed: false,
-      acceptedAt: new Date().toISOString(),
+      acceptedAt: todayString,
       completedAt: null
     };
     
     try {
-      await dataService.updateDailyChallenge(dateString, challengeData);
+      await dataService.updateDailyChallenge(todayString, challengeData);
       setDailyChallenges(prev => ({
         ...prev,
-        [dateString]: challengeData
+        [todayString]: challengeData
       }));
       setShowChallengeModal(false);
     } catch (error) {
@@ -2446,7 +2474,7 @@ const HabitGoalTracker = () => {
 
   // Complete daily challenge
   const completeDailyChallenge = async () => {
-    const dateString = getSelectedDateString(selectedDate);
+    const todayString = getTodayString(); // Always use today's date for challenges
     const currentChallenge = getCurrentDailyChallenge();
     
     if (!currentChallenge) return;
@@ -2454,14 +2482,14 @@ const HabitGoalTracker = () => {
     const updatedChallenge = {
       ...currentChallenge,
       completed: true,
-      completedAt: new Date().toISOString()
+      completedAt: todayString
     };
     
     try {
-      await dataService.updateDailyChallenge(dateString, updatedChallenge);
+      await dataService.updateDailyChallenge(todayString, updatedChallenge);
       setDailyChallenges(prev => ({
         ...prev,
-        [dateString]: updatedChallenge
+        [todayString]: updatedChallenge
       }));
     } catch (error) {
       console.error('Error completing challenge:', error);
@@ -2515,25 +2543,7 @@ const HabitGoalTracker = () => {
       // Update in Firestore
       await dataService.updateTodayVirtues(newVirtues, dateString);
       
-      // Update habit completion based on whether any virtues are checked
-      const checkedVirtuesCount = Object.values(newVirtues).filter(Boolean).length;
-      const isHabitComplete = checkedVirtuesCount > 0;
-      
-      // Update the virtue check-in habit completion
-      const virtueHabitId = 'virtue-checkin';
-      const currentHabitCompletions = habitCompletions[dateString] || {};
-      const newHabitCompletions = {
-        ...currentHabitCompletions,
-        [virtueHabitId]: isHabitComplete
-      };
-      
-      setHabitCompletions(prev => ({
-        ...prev,
-        [dateString]: newHabitCompletions
-      }));
-      
-      // Update in Firestore
-      await dataService.updateTodayHabits(newHabitCompletions, dateString);
+      // Habit completion tracking removed - no longer update virtue check-in habit completion
       
     } catch (error) {
       console.error('Error updating virtue check-in:', error);
@@ -2593,25 +2603,7 @@ const HabitGoalTracker = () => {
       // Update in Firestore
       await dataService.updateTodayVirtues(tempVirtueResponses, dateString);
       
-      // Update habit completion based on whether any virtues are checked
-      const checkedVirtuesCount = Object.values(tempVirtueResponses).filter(Boolean).length;
-      const isHabitComplete = checkedVirtuesCount > 0;
-      
-      // Update the virtue check-in habit completion
-      const virtueHabitId = 'virtue-checkin';
-      const currentHabitCompletions = habitCompletions[dateString] || {};
-      const newHabitCompletions = {
-        ...currentHabitCompletions,
-        [virtueHabitId]: isHabitComplete
-      };
-      
-      setHabitCompletions(prev => ({
-        ...prev,
-        [dateString]: newHabitCompletions
-      }));
-      
-      // Update in Firestore
-      await dataService.updateTodayHabits(newHabitCompletions, dateString);
+      // Habit completion tracking removed - no longer update virtue check-in habit completion
       
       // Reset pagination state and close modal
       setCurrentVirtueIndex(0);
@@ -2674,31 +2666,14 @@ const HabitGoalTracker = () => {
 
   // Get routine completion percentage
   const getRoutineCompletionPercentage = (routineId, dateString = null) => {
-    const routine = routines.find(r => r.id === routineId);
-    if (!routine || routine.habits.length === 0) return 0;
-    
-    const today = dateString || getTodayString();
-    const completedHabits = routine.habits.filter(habitId => 
-      habitCompletions[today]?.[habitId] || false
-    );
-    
-    return Math.round((completedHabits.length / routine.habits.length) * 100);
+    // Completion calculations removed - always return 0
+    return 0;
   };
 
   // Get routine completion stats
   const getRoutineCompletionStats = (routineId, dateString = null) => {
-    const routine = routines.find(r => r.id === routineId);
-    if (!routine) return { completed: false, totalTime: 0, percentage: 0 };
-    
-    const today = dateString || getTodayString();
-    const percentage = getRoutineCompletionPercentage(routineId, today);
-    const completed = percentage === 100;
-    
-    // Calculate total time from routine completions
-    const routineCompletion = routineCompletions[today]?.[routineId];
-    const totalTime = routineCompletion?.totalTime || 0;
-    
-    return { completed, totalTime, percentage };
+    // Completion calculations removed - return default empty stats
+    return { completed: false, totalTime: 0, percentage: 0 };
   };
 
   // Get next incomplete routine based on time and completion
@@ -2752,29 +2727,91 @@ const HabitGoalTracker = () => {
   const getActiveGoal = () => {
     return goals.find(g => !g.completed) || null;
   };
+
+  // Validation helpers for data consistency
+  const validateRoutineHabits = (routine, habits) => {
+    return routine.habits.every(hId => 
+      habits.find(h => h.id === hId)
+    );
+  };
+
+  // Get habit details for routine
+  const getRoutineHabitsWithDetails = (routineId) => {
+    const routine = routines.find(r => r.id === routineId);
+    if (!routine) return [];
+    
+    return routine.habits
+      .map(hId => habits.find(h => h.id === hId))
+      .filter(Boolean); // Remove undefined (deleted habits)
+  };
   
+  // Check and mark completed routines automatically
+  const checkAndMarkCompletedRoutines = async (today, habitCompletionsForToday) => {
+    try {
+      const updates = {};
+      
+      routines.forEach(routine => {
+        if (routine.habits.length === 0) return;
+        
+        const allComplete = routine.habits.every(hId => 
+          habitCompletionsForToday[hId]?.completed === true
+        );
+        
+        if (allComplete && !routineCompletions[today]?.[routine.id]?.completed) {
+          // Calculate total duration from habit completions
+          const habitTimes = {};
+          let totalDuration = 0;
+          
+          routine.habits.forEach(hId => {
+            const habitComp = habitCompletionsForToday[hId];
+            if (habitComp?.duration) {
+              habitTimes[hId] = habitComp.duration;
+              totalDuration += habitComp.duration;
+            }
+          });
+          
+          updates[routine.id] = {
+            completed: true,
+            completedAt: new Date().toISOString(),
+            totalDuration: totalDuration,
+            habitTimes: habitTimes
+          };
+        }
+      });
+      
+      if (Object.keys(updates).length > 0) {
+        setRoutineCompletions(prev => ({
+          ...prev,
+          [today]: { ...prev[today], ...updates }
+        }));
+        await dataService.updateTodayRoutines(updates, today);
+      }
+    } catch (error) {
+      console.error('Error checking and marking completed routines:', error);
+    }
+  };
+
   // Toggle habit completion
   const toggleHabitCompletion = async (habitId, dateString = null) => {
     try {
-      
       // If a routine is active, prevent manual toggling of other habits
       if (activeRoutine && activeRoutine.habits[activeRoutineIndex] !== habitId) {
         return; // Don't allow manual toggle of other habits during routine
       }
 
       const today = dateString || getTodayString();
-      const currentCompletions = habitCompletions || {};
-      const isCurrentlyComplete = currentCompletions[today]?.[habitId] || false;
-    
+      const currentCompletion = habitCompletions[today]?.[habitId];
+      const isComplete = currentCompletion?.completed || false;
+      
       // Only handle timer logic if we're in an active routine
       if (activeRoutine) {
         // If completing the habit and it has a timer running, stop the timer and save time
-        if (!isCurrentlyComplete && activeTimers[habitId]) {
+        if (!isComplete && activeTimers[habitId]) {
           stopTimer(habitId, true);
         }
         
         // If starting the habit and it doesn't have a duration cap, start an uncapped timer
-        if (isCurrentlyComplete && !activeTimers[habitId]) {
+        if (isComplete && !activeTimers[habitId]) {
           const habit = habits.find(h => h.id === habitId);
           if (habit && !habit.duration) {
             startUncappedTimer(habitId);
@@ -2782,16 +2819,30 @@ const HabitGoalTracker = () => {
         }
       }
 
-      // Simple completion toggle - no timer functionality on homepage
-      const newHabitCompletions = {
-        ...currentCompletions,
-        [today]: {
-          ...currentCompletions[today],
-          [habitId]: !isCurrentlyComplete
-        }
+      const newCompletion = {
+        completed: !isComplete,
+        completedAt: !isComplete ? new Date().toISOString() : null,
+        duration: currentCompletion?.duration || null,
+        startTime: currentCompletion?.startTime || null,
+        endTime: currentCompletion?.endTime || null,
+        notes: currentCompletion?.notes || ""
       };
-      setHabitCompletions(newHabitCompletions);
-      await dataService.updateTodayHabits(newHabitCompletions[today], today);
+      
+      // Update state
+      setHabitCompletions(prev => ({
+        ...prev,
+        [today]: {
+          ...prev[today],
+          [habitId]: newCompletion
+        }
+      }));
+      
+      // Update database
+      await dataService.updateTodayHabits({ [habitId]: newCompletion }, today);
+
+      // Check if this habit completion completes any routines
+      const updatedHabitCompletions = { ...habitCompletions[today], [habitId]: newCompletion };
+      await checkAndMarkCompletedRoutines(today, updatedHabitCompletions);
 
       // If this is the current habit in an active routine, complete it
       if (activeRoutine && activeRoutine.habits[activeRoutineIndex] === habitId) {
@@ -2865,19 +2916,28 @@ const HabitGoalTracker = () => {
     if (completed && startTime) {
       const endTime = Date.now();
       const completionTime = (endTime - startTime) / 1000 / 60; // in minutes
-      const currentCompletionTimes = habitCompletionTimes || {};
+      const today = getTodayString();
       
-      const newCompletionTimes = {
-        ...currentCompletionTimes,
-        [habitId]: {
-          startTime: new Date(startTime).toISOString(),
-          endTime: new Date(endTime).toISOString(),
-          duration: completionTime
-        }
+      const completion = {
+        completed: true,
+        completedAt: new Date(endTime).toISOString(),
+        duration: completionTime,
+        startTime: new Date(startTime).toISOString(),
+        endTime: new Date(endTime).toISOString(),
+        notes: ""
       };
       
-      setHabitCompletionTimes(newCompletionTimes);
-      await dataService.updateTodayHabitTimes(newCompletionTimes, getTodayString());
+      // Update state
+      setHabitCompletions(prev => ({
+        ...prev,
+        [today]: {
+          ...prev[today],
+          [habitId]: completion
+        }
+      }));
+      
+      // Update database
+      await dataService.updateTodayHabits({ [habitId]: completion }, today);
     }
     
     // Clear the timer from active timers in database
@@ -3053,17 +3113,16 @@ const HabitGoalTracker = () => {
   const getAverageCompletionTime = (habitId) => {
     const allTimes = [];
     
-    // Check if habitCompletionTimes exists and is an object
-    if (!habitCompletionTimes || typeof habitCompletionTimes !== 'object') {
+    // Check if habitCompletions exists and is an object
+    if (!habitCompletions || typeof habitCompletions !== 'object') {
       return null;
     }
     
     // Get all completion times for this habit across all dates
-    Object.keys(habitCompletionTimes).forEach(date => {
-      if (habitCompletionTimes[date] && habitCompletionTimes[date][habitId]) {
-        const timeData = habitCompletionTimes[date][habitId];
-        const duration = typeof timeData === 'object' ? timeData.duration : timeData;
-        allTimes.push(duration);
+    Object.keys(habitCompletions).forEach(date => {
+      const completion = habitCompletions[date]?.[habitId];
+      if (completion?.duration) {
+        allTimes.push(completion.duration);
       }
     });
     
@@ -3156,7 +3215,8 @@ const HabitGoalTracker = () => {
     
     while (true) {
       const dateString = date.toISOString().split('T')[0];
-      if (habitCompletions[dateString]?.[habitId]) {
+      const completion = habitCompletions[dateString]?.[habitId];
+      if (completion?.completed) {
         streak++;
         date.setDate(date.getDate() - 1);
       } else {
@@ -3169,25 +3229,11 @@ const HabitGoalTracker = () => {
 
   // Calculate total routine duration from habit durations
   const calculateRoutineDuration = (routineId) => {
-    const routine = routines.find(r => r.id === routineId);
-    if (!routine) return 0;
-
-    let totalDuration = 0;
-    let unknownDurationCount = 0;
-
-    routine.habits.forEach(habitId => {
-      const habit = habits.find(h => h.id === habitId);
-      if (habit && habit.duration) {
-        totalDuration += habit.duration;
-      } else {
-        unknownDurationCount++;
-      }
-    });
-
+    // Duration calculations removed - return empty data
     return {
-      totalDuration,
-      unknownDurationCount,
-      hasUnknownDurations: unknownDurationCount > 0
+      totalDuration: 0,
+      unknownDurationCount: 0,
+      hasUnknownDurations: false
     };
   };
 
@@ -3202,7 +3248,8 @@ const HabitGoalTracker = () => {
     
     for (let i = 0; i < routine.habits.length; i++) {
       const habitId = routine.habits[i];
-      const isComplete = habitCompletions[today]?.[habitId] || false;
+      const completion = habitCompletions[today]?.[habitId];
+      const isComplete = completion?.completed || false;
       if (!isComplete) {
         firstIncompleteIndex = i;
         break;
@@ -3243,40 +3290,40 @@ const HabitGoalTracker = () => {
   const completeRoutineHabit = async (habitId) => {
     if (!activeRoutine) return;
 
-    // Stop current timer and save time
+    const today = getTodayString();
     const startTime = activeTimers[habitId];
-    if (startTime) {
-      const endTime = Date.now();
-      const completionTime = (endTime - startTime) / 1000 / 60; // in minutes
-      const currentCompletionTimes = habitCompletionTimes || {};
-      
-      const newCompletionTimes = {
-        ...currentCompletionTimes,
-        [habitId]: {
-          startTime: new Date(startTime).toISOString(),
-          endTime: new Date(endTime).toISOString(),
-          duration: completionTime
-        }
-      };
-      
-      setHabitCompletionTimes(newCompletionTimes);
-      await dataService.updateTodayHabitTimes(newCompletionTimes, getTodayString());
-    }
-
-    // Mark habit complete
-    const currentCompletions = habitCompletions || {};
-    const newHabitCompletions = {
-      ...currentCompletions,
-      [habitId]: true
+    const endTime = Date.now();
+    const duration = startTime ? (endTime - startTime) / 1000 / 60 : null;
+    
+    const completion = {
+      completed: true,
+      completedAt: new Date(endTime).toISOString(),
+      duration: duration,
+      startTime: startTime ? new Date(startTime).toISOString() : null,
+      endTime: new Date(endTime).toISOString(),
+      notes: ""
     };
-    setHabitCompletions(newHabitCompletions);
-    await dataService.updateTodayHabits(newHabitCompletions, getTodayString());
+    
+    // Single atomic update
+    setHabitCompletions(prev => ({
+      ...prev,
+      [today]: {
+        ...prev[today],
+        [habitId]: completion
+      }
+    }));
+    
+    await dataService.updateTodayHabits({ [habitId]: completion }, today);
+
+    // Check if this habit completion completes any routines
+    const updatedHabitCompletions = { ...habitCompletions[today], [habitId]: completion };
+    await checkAndMarkCompletedRoutines(today, updatedHabitCompletions);
 
     // Clear the timer from active timers in database
     const currentActiveTimers = activeTimers || {};
     const newActiveTimers = { ...currentActiveTimers };
     delete newActiveTimers[habitId];
-    await dataService.updateActiveHabitTimers(newActiveTimers, getTodayString());
+    await dataService.updateActiveHabitTimers(newActiveTimers, today);
 
     // Clear the timer from state
     setActiveTimers(prev => {
@@ -3484,57 +3531,9 @@ const HabitGoalTracker = () => {
   };
 
   const finishRoutine = async () => {
-    if (!activeRoutine || !routineStartTime) return;
-
-    // Calculate total routine time
-    const totalTime = (Date.now() - routineStartTime) / 1000 / 60; // in minutes
-    const today = getTodayString();
-    
-    // Calculate estimated routine duration
-    const routineDurationInfo = calculateRoutineDuration(activeRoutine.id);
-    
-    // Collect habit times for this routine
-    const habitTimes = {};
-    activeRoutine.habits.forEach(habitId => {
-      const habitTimeData = habitCompletionTimes[today]?.[habitId];
-      if (habitTimeData) {
-        const habitTime = typeof habitTimeData === 'object' ? habitTimeData.duration : habitTimeData;
-        habitTimes[habitId] = habitTime;
-      }
-    });
-
-    // Save routine completion
-    const currentRoutineCompletions = routineCompletions || {};
-    const newRoutineCompletions = {
-      ...currentRoutineCompletions,
-      [today]: {
-        ...(currentRoutineCompletions[today] || {}),
-        [activeRoutine.id]: {
-          totalTime: totalTime,
-          estimatedTime: routineDurationInfo.totalDuration,
-          startTime: new Date(routineStartTime).toISOString(),
-          endTime: new Date().toISOString(),
-          completed: true,
-          habitTimes: habitTimes,
-          hasUnknownDurations: routineDurationInfo.hasUnknownDurations
-        }
-      }
-    };
-    
-    setRoutineCompletions(newRoutineCompletions);
-    await dataService.updateTodayRoutines(newRoutineCompletions, today);
-
-    // Clear active routine from database
-    await dataService.updateActiveRoutine(null, today);
-
-    // Clear routine state
-    setActiveRoutine(null);
-    setActiveRoutineIndex(0);
-    setRoutineStartTime(null);
-    setRoutinePaused(false);
-    setShowRoutineView(false);
+    // Completion tracking removed - do nothing
+    return;
   };
-  
   
   // Add goal
   const addGoal = async (goalName) => {
@@ -3917,22 +3916,16 @@ const HabitGoalTracker = () => {
           if (dateString !== todayString && !habitCompletions[dateString]) {
             const historicalData = await dataService.getTodayData(dateString);
             if (historicalData) {
-              // Update habit completions for the selected date
+              // Update habit completions for the selected date (unified structure)
               setHabitCompletions(prev => ({
                 ...prev,
-                [dateString]: historicalData.habits || {}
+                [dateString]: historicalData.habitCompletions || {}
               }));
               
-              // Update habit completion times for the selected date
-              setHabitCompletionTimes(prev => ({
-                ...prev,
-                [dateString]: historicalData.habitCompletionTimes || {}
-              }));
-              
-              // Update routine completions for the selected date
+              // Update routine completions for the selected date (unified structure)
               setRoutineCompletions(prev => ({
                 ...prev,
-                [dateString]: historicalData.routines || {}
+                [dateString]: historicalData.routineCompletions || {}
               }));
 
               // Update virtue check-ins for the selected date
@@ -4080,7 +4073,7 @@ const HabitGoalTracker = () => {
           if (item.type === 'routine') {
             const routine = item.data;
             const isExpanded = expandedRoutines.has(routine.id);
-            const stats = getRoutineCompletionStats(routine.id, getSelectedDateString(selectedDate));
+            const stats = getRoutineCompletionStats(routine.id, getTodayString());
             
             return (
               <div key={`routine-${routine.id}`} className="bg-white rounded-xl shadow-md">
@@ -4123,7 +4116,8 @@ const HabitGoalTracker = () => {
                       {routine.habits.map(habitId => {
                         const habit = habits.find(h => h.id === habitId);
                         if (!habit) return null;
-                        const isComplete = habitCompletions[getSelectedDateString(selectedDate)]?.[habitId] || false;
+                        const completion = habitCompletions[getTodayString()]?.[habitId];
+                        const isComplete = completion?.completed || false;
                         const streak = getHabitStreak(habitId);
                         
                         
@@ -4131,7 +4125,7 @@ const HabitGoalTracker = () => {
                           <div
                             key={habitId}
                             className="flex items-center justify-between p-3 bg-stone-50 rounded-lg cursor-pointer hover:bg-stone-100 transition-colors"
-                            onClick={() => toggleHabitCompletion(habitId, getSelectedDateString(selectedDate))}
+                            onClick={() => toggleHabitCompletion(habitId, getTodayString())}
                           >
                             <div className="flex items-center gap-3">
                               {isComplete ? (
@@ -4174,7 +4168,7 @@ const HabitGoalTracker = () => {
                                         onClick={(e) => {
                                           e.stopPropagation();
                                           stopTimer(habit.id, true);
-                                          toggleHabitCompletion(habit.id, getSelectedDateString(selectedDate));
+                                          toggleHabitCompletion(habit.id, getTodayString());
                                         }}
                                         className="p-1 hover:bg-green-100 rounded transition-colors"
                                         title="Complete Habit"
@@ -4236,11 +4230,12 @@ const HabitGoalTracker = () => {
                       )}
                     </div>
                     
-                    {/* Routine Completion Info */}
+                    {/* Routine Completion Info - Only show if completed through active routine */}
                     {(() => {
-                      const today = getSelectedDateString(selectedDate);
+                      const today = getTodayString();
                       const routineCompletion = routineCompletions[today]?.[routine.id];
-                      if (routineCompletion && routineCompletion.completed) {
+                      // Only show green box if routine was completed through active routine (has timing data)
+                      if (routineCompletion && routineCompletion.completed && routineCompletion.totalTime > 0) {
                         return (
                           <div className="mt-3 p-3 bg-green-50 border border-green-200 rounded-lg">
                             <div className="flex items-center justify-between">
@@ -4277,7 +4272,8 @@ const HabitGoalTracker = () => {
             );
           } else if (item.type === 'habit') {
             const habit = item.data;
-            const isComplete = habitCompletions[getSelectedDateString(selectedDate)]?.[habit.id] || false;
+            const completion = habitCompletions[getTodayString()]?.[habit.id];
+            const isComplete = completion?.completed || false;
             const streak = getHabitStreak(habit.id);
             
             return (
@@ -4286,7 +4282,7 @@ const HabitGoalTracker = () => {
                   <div className="flex items-center gap-3">
                     <div
                       className="cursor-pointer"
-                      onClick={() => toggleHabitCompletion(habit.id, getSelectedDateString(selectedDate))}
+                      onClick={() => toggleHabitCompletion(habit.id, getTodayString())}
                     >
                       {isComplete ? (
                         <CheckSquare className="text-[#333333]" size={24} strokeWidth={2.5} />
@@ -4303,9 +4299,9 @@ const HabitGoalTracker = () => {
                       {habit.description && (
                         <p className="text-sm text-[#333333] opacity-70">{habit.description}</p>
                       )}
-                      {isComplete && getCompletionTimeDisplay(habit.id, getSelectedDateString(selectedDate)) && (
+                      {isComplete && getCompletionTimeDisplay(habit.id, getTodayString()) && (
                         <span className="text-xs text-green-600 font-mono">
-                          Completed in {getCompletionTimeDisplay(habit.id, getSelectedDateString(selectedDate))}m
+                          Completed in {getCompletionTimeDisplay(habit.id, getTodayString())}m
                         </span>
                       )}
                     </div>
@@ -4332,7 +4328,7 @@ const HabitGoalTracker = () => {
                             <button
                               onClick={() => {
                                 stopTimer(habit.id, true);
-                                toggleHabitCompletion(habit.id, getSelectedDateString(selectedDate));
+                                toggleHabitCompletion(habit.id, getTodayString());
                               }}
                               className="p-1 hover:bg-green-100 rounded transition-colors"
                               title="Complete Habit"
@@ -4601,7 +4597,8 @@ const HabitGoalTracker = () => {
               {routine.habits.map(habitId => {
                 const habit = habits.find(h => h.id === habitId);
                 if (!habit) return null;
-                const isComplete = habitCompletions[getTodayString()]?.[habitId] || false;
+                const completion = habitCompletions[getTodayString()]?.[habitId];
+                const isComplete = completion?.completed || false;
                 const streak = getHabitStreak(habitId);
                 
                 return (
@@ -4611,7 +4608,7 @@ const HabitGoalTracker = () => {
                   >
                     <div 
                       className="flex-grow flex items-center gap-3 cursor-pointer"
-                      onClick={() => toggleHabitCompletion(habitId, getSelectedDateString(selectedDate))}
+                      onClick={() => toggleHabitCompletion(habitId, getTodayString())}
                     >
                       {isComplete ? (
                         <CheckSquare className="text-[#333333]" size={20} strokeWidth={2.5} />
@@ -4646,7 +4643,7 @@ const HabitGoalTracker = () => {
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   stopTimer(habit.id, true);
-                                  toggleHabitCompletion(habit.id, getSelectedDateString(selectedDate));
+                                  toggleHabitCompletion(habit.id, getTodayString());
                                 }}
                                 className="p-1 hover:bg-green-100 rounded transition-colors"
                                 title="Complete Habit"
@@ -4911,7 +4908,8 @@ const HabitGoalTracker = () => {
             <h3 className="font-bold text-[#333333] mb-4 text-lg uppercase tracking-wide">Single Habits</h3>
             <div className="space-y-2">
               {singleHabits.map(habit => {
-                const isComplete = habitCompletions[getTodayString()]?.[habit.id] || false;
+                const completion = habitCompletions[getTodayString()]?.[habit.id];
+                const isComplete = completion?.completed || false;
                 const streak = getHabitStreak(habit.id);
                 
                 return (
@@ -4921,7 +4919,7 @@ const HabitGoalTracker = () => {
                   >
                     <div 
                       className="flex-grow flex items-center gap-3 cursor-pointer"
-                      onClick={() => toggleHabitCompletion(habit.id, getSelectedDateString(selectedDate))}
+                      onClick={() => toggleHabitCompletion(habit.id, getTodayString())}
                     >
                       {isComplete ? (
                         <CheckSquare className="text-[#333333]" size={20} strokeWidth={2.5} />
@@ -4964,7 +4962,7 @@ const HabitGoalTracker = () => {
                               <button
                                 onClick={() => {
                                   stopTimer(habit.id, true);
-                                  toggleHabitCompletion(habit.id, getSelectedDateString(selectedDate));
+                                  toggleHabitCompletion(habit.id, getTodayString());
                                 }}
                                 className="p-1 hover:bg-green-100 rounded transition-colors"
                                 title="Complete Habit"
@@ -5181,7 +5179,7 @@ const HabitGoalTracker = () => {
       
       return activeHabits.map(habit => ({
         ...habit,
-        completed: habitCompletions[dateStr]?.[habit.id] || false
+        completed: habitCompletions[dateStr]?.[habit.id]?.completed || false
       }));
     };
     
