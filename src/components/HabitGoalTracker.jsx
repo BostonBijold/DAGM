@@ -1527,16 +1527,16 @@ const HabitGoalTracker = () => {
     
     if (isEditing) {
       return (
-        <div className="border-2 border-blue-300 rounded-lg p-3 space-y-3">
+        <div className="border-2 border-[#1a252f]/40 rounded-lg p-3 space-y-3">
           <div className="flex justify-between items-center">
             <h6 className="font-bold text-[#333333] text-sm uppercase tracking-wide">Edit Habit</h6>
             <div className="flex gap-1">
               <button
                 onClick={handleSave}
-                className="p-1 hover:bg-green-100 rounded transition-colors"
+                className="p-1 hover:bg-[#4b5320]/20 rounded transition-colors"
                 title="Save"
               >
-                <Check size={16} strokeWidth={2.5} className="text-green-600" />
+                <Check size={16} strokeWidth={2.5} className="text-[#4b5320]" />
               </button>
               <button
                 onClick={onCancel}
@@ -1654,7 +1654,7 @@ const HabitGoalTracker = () => {
               <div className="flex items-center gap-2">
                 {timerDisplay.isCapped ? (
                   <>
-                    <span className="text-xs bg-blue-500 text-white px-2 py-1 font-mono rounded">
+                    <span className="text-xs bg-[#1a252f]/100 text-white px-2 py-1 font-mono rounded">
                       {formatMinutesToHours(timerDisplay.remaining)} remaining
                     </span>
                     <span className="text-xs text-[#333333] opacity-70">
@@ -1662,7 +1662,7 @@ const HabitGoalTracker = () => {
                     </span>
                   </>
                 ) : (
-                  <span className="text-xs bg-green-500 text-white px-2 py-1 font-mono rounded">
+                  <span className="text-xs bg-[#4b5320]/100 text-white px-2 py-1 font-mono rounded">
                     {formatMinutesToHours(timerDisplay.elapsed)} elapsed
                   </span>
                 )}
@@ -1670,7 +1670,7 @@ const HabitGoalTracker = () => {
               {timerDisplay.isCapped && (
                 <div className="w-full bg-stone-200 h-2 rounded-full">
                   <div
-                    className="bg-blue-500 h-2 rounded-full transition-all"
+                    className="bg-[#1a252f]/100 h-2 rounded-full transition-all"
                     style={{ width: `${timerDisplay.progress}%` }}
                   ></div>
                 </div>
@@ -2082,9 +2082,9 @@ const HabitGoalTracker = () => {
               <button
                 onClick={handleRoutineChoice}
                 disabled={routines.length >= 5}
-                className="w-full flex items-center gap-3 p-4 rounded-lg border-2 border-green-200 bg-green-50 hover:bg-green-100 hover:border-green-300 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-green-50 disabled:hover:border-green-200"
+                className="w-full flex items-center gap-3 p-4 rounded-lg border-2 border-[#4b5320]/30 bg-[#4b5320]/10 hover:bg-[#4b5320]/20 hover:border-[#4b5320]/40 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-[#4b5320]/10 disabled:hover:border-[#4b5320]/30"
               >
-                <div className="w-10 h-10 bg-green-500 rounded-lg flex items-center justify-center">
+                <div className="w-10 h-10 bg-[#4b5320]/100 rounded-lg flex items-center justify-center">
                   <Calendar size={20} strokeWidth={2.5} className="text-white" />
                 </div>
                 <div className="flex-1 text-left">
@@ -2100,9 +2100,9 @@ const HabitGoalTracker = () => {
 
               <button
                 onClick={handleHabitChoice}
-                className="w-full flex items-center gap-3 p-4 rounded-lg border-2 border-blue-200 bg-blue-50 hover:bg-blue-100 hover:border-blue-300 transition-all"
+                className="w-full flex items-center gap-3 p-4 rounded-lg border-2 border-[#1a252f]/30 bg-[#1a252f]/10 hover:bg-[#1a252f]/20 hover:border-[#1a252f]/40 transition-all"
               >
-                <div className="w-10 h-10 bg-blue-500 rounded-lg flex items-center justify-center">
+                <div className="w-10 h-10 bg-[#1a252f]/100 rounded-lg flex items-center justify-center">
                   <CheckSquare size={20} strokeWidth={2.5} className="text-white" />
                 </div>
                 <div className="flex-1 text-left">
@@ -2332,7 +2332,7 @@ const HabitGoalTracker = () => {
                   onClick={() => {
                     completeRoutineHabit(currentHabit.id);
                   }}
-                  className="p-4 rounded-full bg-green-500 hover:bg-green-600 transition-colors shadow-lg"
+                  className="p-4 rounded-full bg-[#4b5320]/100 hover:bg-[#4b5320] transition-colors shadow-lg"
                   title="Mark Complete"
                 >
                   <CheckCircle size={28} strokeWidth={2.5} className="text-white" />
@@ -2369,36 +2369,36 @@ const HabitGoalTracker = () => {
                     key={habitId}
                     className={`flex items-center justify-between p-3 rounded-lg transition-colors ${
                       isCurrent 
-                        ? 'bg-blue-50 border border-blue-200' 
+                        ? 'bg-[#1a252f]/10 border border-[#1a252f]/30' 
                         : isComplete 
-                          ? 'bg-green-50 border border-green-200' 
+                          ? 'bg-[#4b5320]/10 border border-[#4b5320]/30' 
                           : 'bg-stone-50 border border-stone-200'
                     }`}
                   >
                     <div className="flex items-center gap-3">
                       {isComplete ? (
-                        <CheckCircle className="text-green-600" size={18} strokeWidth={2.5} />
+                        <CheckCircle className="text-[#4b5320]" size={18} strokeWidth={2.5} />
                       ) : isCurrent ? (
-                        <div className="w-4 h-4 border-2 border-blue-500 rounded-full flex items-center justify-center">
-                          <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                        <div className="w-4 h-4 border-2 border-[#1a252f] rounded-full flex items-center justify-center">
+                          <div className="w-2 h-2 bg-[#1a252f]/100 rounded-full"></div>
                         </div>
                       ) : (
                         <X className="text-[#333333] opacity-40" size={18} strokeWidth={2.5} />
                       )}
                       <span className={`text-sm font-medium ${
-                        isComplete ? 'text-green-700' : isCurrent ? 'text-blue-700' : 'text-[#333333]'
+                        isComplete ? 'text-[#4b5320]' : isCurrent ? 'text-[#1a252f]' : 'text-[#333333]'
                       }`}>
                         {habit.name}
                       </span>
                     </div>
                     <div className="flex items-center gap-2">
                       {isComplete && habitTime && (
-                        <span className="text-xs bg-green-200 text-green-800 px-2 py-1 font-mono rounded">
+                        <span className="text-xs bg-[#4b5320]/30 text-[#4b5320] px-2 py-1 font-mono rounded">
                           {formatMinutesToHours(Math.round(habitTime * 10) / 10)}
                         </span>
                       )}
                       {isCurrent && (
-                        <span className="text-xs bg-blue-200 text-blue-800 px-2 py-1 font-mono rounded">
+                        <span className="text-xs bg-[#1a252f]/30 text-[#1a252f] px-2 py-1 font-mono rounded">
                           Now
                         </span>
                       )}
@@ -3128,8 +3128,8 @@ const HabitGoalTracker = () => {
   const getTimerColor = (habitId) => {
     const mode = getTimerDisplayMode(habitId);
     switch (mode) {
-      case 'countdown': return '#10b981'; // green
-      case 'countup': return '#3b82f6'; // blue
+      case 'countdown': return '#4b5320'; // green
+      case 'countup': return '#1a252f'; // blue
       case 'overestimate': return '#ef4444'; // red
       default: return '#6b7280'; // gray
     }
@@ -3243,7 +3243,7 @@ const HabitGoalTracker = () => {
           <span className="text-[#333333] opacity-70">
             {elapsed}m elapsed
           </span>
-          <span className={`font-mono ${isOverExpected ? 'text-red-600' : 'text-blue-600'}`}>
+          <span className={`font-mono ${isOverExpected ? 'text-red-600' : 'text-[#1a252f]'}`}>
             Expected: {expectedTime}m
           </span>
         </div>
@@ -3251,7 +3251,7 @@ const HabitGoalTracker = () => {
         <div className="relative w-full bg-stone-200 h-3 rounded-full overflow-hidden">
           {/* Blue progress bar (up to expected time) */}
           <div
-            className="absolute top-0 left-0 bg-blue-500 h-full transition-all duration-300"
+            className="absolute top-0 left-0 bg-[#1a252f]/100 h-full transition-all duration-300"
             style={{ 
               width: `${Math.min((elapsed / expectedTime) * 100, 100)}%` 
             }}
@@ -4154,7 +4154,7 @@ const HabitGoalTracker = () => {
                   <button
                     onClick={showChallenge}
                     disabled={!canEdit}
-                    className="w-full bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed font-medium transition-colors"
+                    className="w-full bg-[#1a252f] text-white px-4 py-2 rounded-lg hover:bg-[#1a252f] disabled:bg-gray-300 disabled:cursor-not-allowed font-medium transition-colors"
                   >
                     {canEdit ? 'Daily Challenge' : 'Challenge (View Only)'}
                   </button>
@@ -4164,11 +4164,11 @@ const HabitGoalTracker = () => {
               // Show challenge description with complete button
               return (
                 <div className="mt-4 pt-4 border-t border-gray-200">
-                  <div className="bg-blue-50 p-3 rounded-lg mb-3">
-                    <p className="text-sm font-medium text-blue-800 mb-1">Today's Challenge:</p>
-                    <p className="text-sm text-blue-700">{currentChallenge.challenge}</p>
+                  <div className="bg-[#1a252f]/10 p-3 rounded-lg mb-3">
+                    <p className="text-sm font-medium text-[#1a252f] mb-1">Today's Challenge:</p>
+                    <p className="text-sm text-[#1a252f]">{currentChallenge.challenge}</p>
                     <span className={`inline-block px-2 py-1 text-xs font-medium rounded-full mt-2 ${
-                      currentChallenge.difficulty === 'easy' ? 'bg-green-100 text-green-800' :
+                      currentChallenge.difficulty === 'easy' ? 'bg-[#4b5320]/20 text-[#4b5320]' :
                       currentChallenge.difficulty === 'medium' ? 'bg-yellow-100 text-yellow-800' :
                       'bg-red-100 text-red-800'
                     }`}>
@@ -4178,7 +4178,7 @@ const HabitGoalTracker = () => {
                   <button
                     onClick={completeDailyChallenge}
                     disabled={!canEdit}
-                    className="w-full bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed font-medium transition-colors"
+                    className="w-full bg-[#4b5320] text-white px-4 py-2 rounded-lg hover:bg-[#4b5320] disabled:bg-gray-300 disabled:cursor-not-allowed font-medium transition-colors"
                   >
                     {canEdit ? 'Mark Complete' : 'Completed'}
                   </button>
@@ -4188,13 +4188,13 @@ const HabitGoalTracker = () => {
               // Show completed challenge
               return (
                 <div className="mt-4 pt-4 border-t border-gray-200">
-                  <div className="bg-green-50 p-3 rounded-lg">
+                  <div className="bg-[#4b5320]/10 p-3 rounded-lg">
                     <div className="flex items-center gap-2 mb-2">
-                      <span className="text-green-600 text-lg">✓</span>
-                      <p className="text-sm font-medium text-green-800">Challenge Completed!</p>
+                      <span className="text-[#4b5320] text-lg">✓</span>
+                      <p className="text-sm font-medium text-[#4b5320]">Challenge Completed!</p>
                     </div>
-                    <p className="text-sm text-green-700">{currentChallenge.challenge}</p>
-                    <p className="text-xs text-green-600 mt-1">
+                    <p className="text-sm text-[#4b5320]">{currentChallenge.challenge}</p>
+                    <p className="text-xs text-[#4b5320] mt-1">
                       Completed at {new Date(currentChallenge.completedAt).toLocaleTimeString()}
                     </p>
                   </div>
@@ -4277,9 +4277,9 @@ const HabitGoalTracker = () => {
                   <div className="flex items-center gap-2">
                     <span className={`text-sm font-mono px-2 py-1 rounded ${
                       stats.completed 
-                        ? 'bg-green-200 text-green-800' 
+                        ? 'bg-[#4b5320]/30 text-[#4b5320]' 
                         : stats.percentage > 0 
-                          ? 'bg-blue-200 text-blue-800' 
+                          ? 'bg-[#1a252f]/30 text-[#1a252f]' 
                           : 'bg-stone-200 text-stone-600'
                     }`}>
                       {stats.percentage}%
@@ -4322,7 +4322,7 @@ const HabitGoalTracker = () => {
                                   {habit.name}
                                 </span>
                                 {isComplete && getCompletionTimeDisplay(habitId, getSelectedDateString(selectedDate)) && (
-                                  <span className="text-xs text-green-600 font-mono">
+                                  <span className="text-xs text-[#4b5320] font-mono">
                                     Completed in {getCompletionTimeDisplay(habitId, getSelectedDateString(selectedDate))}m
                                   </span>
                                 )}
@@ -4340,11 +4340,11 @@ const HabitGoalTracker = () => {
                                   {activeTimers[habit.id] ? (
                                     <>
                                       {habit.duration ? (
-                                        <span className="text-xs bg-blue-500 text-white px-2 py-1 font-mono rounded">
+                                        <span className="text-xs bg-[#1a252f]/100 text-white px-2 py-1 font-mono rounded">
                                           {formatMinutesToHours(getTimerTimeRemaining(habit.id))}
                                         </span>
                                       ) : (
-                                        <span className="text-xs bg-green-500 text-white px-2 py-1 font-mono rounded">
+                                        <span className="text-xs bg-[#4b5320]/100 text-white px-2 py-1 font-mono rounded">
                                           {formatMinutesToHours(Math.floor((Date.now() - activeTimers[habit.id]) / 1000 / 60))}
                                         </span>
                                       )}
@@ -4354,10 +4354,10 @@ const HabitGoalTracker = () => {
                                           stopTimer(habit.id, true);
                                           toggleHabitCompletion(habit.id, getTodayString());
                                         }}
-                                        className="p-1 hover:bg-green-100 rounded transition-colors"
+                                        className="p-1 hover:bg-[#4b5320]/20 rounded transition-colors"
                                         title="Complete Habit"
                                       >
-                                        <Check size={14} strokeWidth={2.5} className="text-green-600" />
+                                        <Check size={14} strokeWidth={2.5} className="text-[#4b5320]" />
                                       </button>
                                       <button
                                         onClick={(e) => {
@@ -4376,10 +4376,10 @@ const HabitGoalTracker = () => {
                                         e.stopPropagation();
                                         startTimer(habit.id, habit.duration);
                                       }}
-                                      className="p-1 hover:bg-green-100 rounded transition-colors"
+                                      className="p-1 hover:bg-[#4b5320]/20 rounded transition-colors"
                                       title="Start Timer"
                                     >
-                                      <div className="w-3 h-3 bg-green-500 rounded-full"></div>
+                                      <div className="w-3 h-3 bg-[#4b5320]/100 rounded-full"></div>
                                     </button>
                                   ) : habit.expectedCompletionTime ? (
                                     <button
@@ -4387,10 +4387,10 @@ const HabitGoalTracker = () => {
                                         e.stopPropagation();
                                         startUncappedTimer(habit.id);
                                       }}
-                                      className="p-1 hover:bg-green-100 rounded transition-colors"
+                                      className="p-1 hover:bg-[#4b5320]/20 rounded transition-colors"
                                       title="Start Timer"
                                     >
-                                      <div className="w-3 h-3 bg-green-500 rounded-full"></div>
+                                      <div className="w-3 h-3 bg-[#4b5320]/100 rounded-full"></div>
                                     </button>
                                   ) : null}
                                   {getAverageCompletionTime(habit.id) && (
@@ -4421,15 +4421,15 @@ const HabitGoalTracker = () => {
                       // Only show green box if routine was completed through active routine (has timing data)
                       if (routineCompletion && routineCompletion.completed && routineCompletion.totalTime > 0) {
                         return (
-                          <div className="mt-3 p-3 bg-green-50 border border-green-200 rounded-lg">
+                          <div className="mt-3 p-3 bg-[#4b5320]/10 border border-[#4b5320]/30 rounded-lg">
                             <div className="flex items-center justify-between">
-                              <span className="text-sm font-medium text-green-800">Routine Completed Today</span>
-                              <span className="text-sm font-mono text-green-600">
+                              <span className="text-sm font-medium text-[#4b5320]">Routine Completed Today</span>
+                              <span className="text-sm font-mono text-[#4b5320]">
                                 {Math.round(routineCompletion.totalTime * 10) / 10}m total
                               </span>
                             </div>
                             {routineCompletion.startTime && routineCompletion.endTime && (
-                              <div className="text-xs text-green-600 mt-1">
+                              <div className="text-xs text-[#4b5320] mt-1">
                                 {new Date(routineCompletion.startTime).toLocaleTimeString()} - {new Date(routineCompletion.endTime).toLocaleTimeString()}
                               </div>
                             )}
@@ -4444,7 +4444,7 @@ const HabitGoalTracker = () => {
                       <button
                         onClick={() => startRoutine(routine.id)}
                         disabled={activeRoutine !== null}
-                        className="mt-4 w-full flex items-center justify-center gap-2 bg-green-500 text-white py-3 rounded-lg hover:bg-green-600 font-bold uppercase text-sm tracking-wider shadow-lg transition-all hover:shadow-xl hover:scale-[1.02] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
+                        className="mt-4 w-full flex items-center justify-center gap-2 bg-[#4b5320]/100 text-white py-3 rounded-lg hover:bg-[#4b5320] font-bold uppercase text-sm tracking-wider shadow-lg transition-all hover:shadow-xl hover:scale-[1.02] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
                       >
                         <Play size={20} strokeWidth={2.5} />
                         {activeRoutine ? 'Routine In Progress' : 'Start Routine'}
@@ -4484,7 +4484,7 @@ const HabitGoalTracker = () => {
                         <p className="text-sm text-[#333333] opacity-70">{habit.description}</p>
                       )}
                       {isComplete && getCompletionTimeDisplay(habit.id, getTodayString()) && (
-                        <span className="text-xs text-green-600 font-mono">
+                        <span className="text-xs text-[#4b5320] font-mono">
                           Completed in {getCompletionTimeDisplay(habit.id, getTodayString())}m
                         </span>
                       )}
@@ -4501,11 +4501,11 @@ const HabitGoalTracker = () => {
                         {activeTimers[habit.id] ? (
                           <>
                             {habit.duration ? (
-                              <span className="text-xs bg-blue-500 text-white px-2 py-1 font-mono rounded">
+                              <span className="text-xs bg-[#1a252f]/100 text-white px-2 py-1 font-mono rounded">
                                 {formatMinutesToHours(getTimerTimeRemaining(habit.id))}
                               </span>
                             ) : (
-                              <span className="text-xs bg-green-500 text-white px-2 py-1 font-mono rounded">
+                              <span className="text-xs bg-[#4b5320]/100 text-white px-2 py-1 font-mono rounded">
                                 {formatMinutesToHours(Math.floor((Date.now() - activeTimers[habit.id]) / 1000 / 60))}
                               </span>
                             )}
@@ -4514,10 +4514,10 @@ const HabitGoalTracker = () => {
                                 stopTimer(habit.id, true);
                                 toggleHabitCompletion(habit.id, getTodayString());
                               }}
-                              className="p-1 hover:bg-green-100 rounded transition-colors"
+                              className="p-1 hover:bg-[#4b5320]/20 rounded transition-colors"
                               title="Complete Habit"
                             >
-                              <Check size={14} strokeWidth={2.5} className="text-green-600" />
+                              <Check size={14} strokeWidth={2.5} className="text-[#4b5320]" />
                             </button>
                             <button
                               onClick={() => stopTimer(habit.id, false)}
@@ -4530,18 +4530,18 @@ const HabitGoalTracker = () => {
                         ) : habit.duration ? (
                           <button
                             onClick={() => startTimer(habit.id, habit.duration)}
-                            className="p-1 hover:bg-green-100 rounded transition-colors"
+                            className="p-1 hover:bg-[#4b5320]/20 rounded transition-colors"
                             title="Start Timer"
                           >
-                            <div className="w-3 h-3 bg-green-500 rounded-full"></div>
+                            <div className="w-3 h-3 bg-[#4b5320]/100 rounded-full"></div>
                           </button>
                         ) : habit.expectedCompletionTime ? (
                           <button
                             onClick={() => startUncappedTimer(habit.id)}
-                            className="p-1 hover:bg-green-100 rounded transition-colors"
+                            className="p-1 hover:bg-[#4b5320]/20 rounded transition-colors"
                             title="Start Timer"
                           >
-                            <div className="w-3 h-3 bg-green-500 rounded-full"></div>
+                            <div className="w-3 h-3 bg-[#4b5320]/100 rounded-full"></div>
                           </button>
                         ) : null}
                         {getAverageCompletionTime(habit.id) && (
@@ -4581,7 +4581,7 @@ const HabitGoalTracker = () => {
                           <span className="font-medium text-[#333333]">{routine.name}</span>
                           <span className={`text-xs px-2 py-1 rounded font-mono ${
                             completion.completed 
-                              ? 'bg-green-200 text-green-800' 
+                              ? 'bg-[#4b5320]/30 text-[#4b5320]' 
                               : 'bg-orange-200 text-orange-800'
                           }`}>
                             {completion.completed ? 'Completed' : 'Abandoned'}
@@ -4596,7 +4596,7 @@ const HabitGoalTracker = () => {
                             {completion.estimatedTime && (
                               <p className={`font-medium ${
                                 completion.totalTime <= completion.estimatedTime 
-                                  ? 'text-green-600' 
+                                  ? 'text-[#4b5320]' 
                                   : 'text-orange-600'
                               }`}>
                                 {completion.totalTime <= completion.estimatedTime ? '✓' : '⚠'} 
@@ -4720,7 +4720,7 @@ const HabitGoalTracker = () => {
         <div className="flex items-center gap-2 flex-wrap">
           <button
             onClick={() => setShowAddChoiceModal(true)}
-            className="flex items-center gap-2 bg-green-500 text-white px-4 py-2 rounded-lg hover:bg-green-600 font-bold uppercase text-sm tracking-wider shadow-lg transition-all hover:shadow-xl hover:scale-105"
+            className="flex items-center gap-2 bg-[#4b5320]/100 text-white px-4 py-2 rounded-lg hover:bg-[#4b5320] font-bold uppercase text-sm tracking-wider shadow-lg transition-all hover:shadow-xl hover:scale-105"
           >
             <Plus size={18} strokeWidth={2.5} />
             Add
@@ -4763,7 +4763,7 @@ const HabitGoalTracker = () => {
                 const durationInfo = calculateRoutineDuration(routine.id);
                 if (durationInfo.totalDuration > 0) {
                   return (
-                    <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 font-mono rounded">
+                    <span className="text-xs bg-[#1a252f]/20 text-[#1a252f] px-2 py-1 font-mono rounded">
                       {formatMinutesToHours(durationInfo.totalDuration)} total
                       {durationInfo.hasUnknownDurations && ` (+${durationInfo.unknownDurationCount} unknown)`}
                     </span>
@@ -4815,11 +4815,11 @@ const HabitGoalTracker = () => {
                           {activeTimers[habit.id] ? (
                             <>
                               {habit.duration ? (
-                                <span className="text-xs bg-blue-500 text-white px-2 py-1 font-mono rounded">
+                                <span className="text-xs bg-[#1a252f]/100 text-white px-2 py-1 font-mono rounded">
                                   {formatMinutesToHours(getTimerTimeRemaining(habit.id))}
                                 </span>
                               ) : (
-                                <span className="text-xs bg-green-500 text-white px-2 py-1 font-mono rounded">
+                                <span className="text-xs bg-[#4b5320]/100 text-white px-2 py-1 font-mono rounded">
                                   {formatMinutesToHours(Math.floor((Date.now() - activeTimers[habit.id]) / 1000 / 60))}
                                 </span>
                               )}
@@ -4829,10 +4829,10 @@ const HabitGoalTracker = () => {
                                   stopTimer(habit.id, true);
                                   toggleHabitCompletion(habit.id, getTodayString());
                                 }}
-                                className="p-1 hover:bg-green-100 rounded transition-colors"
+                                className="p-1 hover:bg-[#4b5320]/20 rounded transition-colors"
                                 title="Complete Habit"
                               >
-                                <Check size={14} strokeWidth={2.5} className="text-green-600" />
+                                <Check size={14} strokeWidth={2.5} className="text-[#4b5320]" />
                               </button>
                               <button
                                 onClick={(e) => {
@@ -4851,10 +4851,10 @@ const HabitGoalTracker = () => {
                                 e.stopPropagation();
                                 startTimer(habit.id, habit.duration);
                               }}
-                              className="p-1 hover:bg-green-100 rounded transition-colors"
+                              className="p-1 hover:bg-[#4b5320]/20 rounded transition-colors"
                               title="Start Timer"
                             >
-                              <div className="w-3 h-3 bg-green-500 rounded-full"></div>
+                              <div className="w-3 h-3 bg-[#4b5320]/100 rounded-full"></div>
                             </button>
                           ) : null}
                           {getAverageCompletionTime(habit.id) && (
@@ -4889,7 +4889,7 @@ const HabitGoalTracker = () => {
                 <button
                   onClick={() => startRoutine(routine.id)}
                   disabled={activeRoutine !== null}
-                  className="w-full flex items-center justify-center gap-2 bg-green-500 text-white py-3 rounded-lg hover:bg-green-600 font-bold uppercase text-sm tracking-wider shadow-lg transition-all hover:shadow-xl hover:scale-[1.02] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
+                  className="w-full flex items-center justify-center gap-2 bg-[#4b5320]/100 text-white py-3 rounded-lg hover:bg-[#4b5320] font-bold uppercase text-sm tracking-wider shadow-lg transition-all hover:shadow-xl hover:scale-[1.02] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
                 >
                   <Play size={20} strokeWidth={2.5} />
                   {activeRoutine ? 'Routine In Progress' : 'Start Routine'}
@@ -4902,7 +4902,7 @@ const HabitGoalTracker = () => {
         {/* Virtue Check-in Modal - Fixed position overlay */}
         {expandedVirtues && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-xl shadow-2xl border-2 border-blue-300 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="bg-white rounded-xl shadow-2xl border-2 border-[#1a252f]/40 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
               <div className="px-6 py-4 border-b border-gray-200 sticky top-0 bg-white">
                 <div className="flex items-center justify-between">
                   <h4 className="font-semibold text-[#333333] text-xl">Daily Virtue Check-in</h4>
@@ -4943,7 +4943,7 @@ const HabitGoalTracker = () => {
                           </div>
                           <div className="w-full bg-gray-200 rounded-full h-2">
                             <div 
-                              className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                              className="bg-[#1a252f] h-2 rounded-full transition-all duration-300"
                               style={{ width: `${((currentVirtueIndex + 1) / weeklyFocuses.length) * 100}%` }}
                             ></div>
                           </div>
@@ -4953,12 +4953,12 @@ const HabitGoalTracker = () => {
                         <h3 className="text-3xl font-bold text-[#333333] mb-4">
                           {currentVirtue.virtue}
                           {isCurrentWeekVirtue && (
-                            <span className="ml-3 text-lg text-blue-600 font-normal">(This Week's Focus)</span>
+                            <span className="ml-3 text-lg text-[#1a252f] font-normal">(This Week's Focus)</span>
                           )}
                         </h3>
 
                         {/* Focus Statement */}
-                        <p className="text-lg text-blue-800 mb-6 font-medium">
+                        <p className="text-lg text-[#1a252f] mb-6 font-medium">
                           {currentVirtue.focus}
                         </p>
 
@@ -4976,8 +4976,8 @@ const HabitGoalTracker = () => {
                               onClick={() => selectVirtueResponse(currentVirtue.virtue, true)}
                               className={`px-8 py-4 rounded-xl text-lg font-semibold transition-all duration-200 ${
                                 currentResponse === true
-                                  ? 'bg-green-600 text-white shadow-lg transform scale-105'
-                                  : 'bg-green-100 text-green-700 hover:bg-green-200'
+                                  ? 'bg-[#4b5320] text-white shadow-lg transform scale-105'
+                                  : 'bg-[#4b5320]/20 text-[#4b5320] hover:bg-[#4b5320]/30'
                               }`}
                             >
                               ✓ Yes
@@ -5036,11 +5036,11 @@ const HabitGoalTracker = () => {
                           key={index}
                           className={`flex items-center gap-4 p-4 rounded-lg border-2 ${
                             response === true 
-                              ? 'bg-green-50 border-green-200' 
+                              ? 'bg-[#4b5320]/10 border-[#4b5320]/30' 
                               : response === false 
                                 ? 'bg-red-50 border-red-200' 
                                 : 'bg-gray-50 border-gray-200'
-                          } ${isCurrentWeekVirtue ? 'ring-2 ring-blue-300' : ''}`}
+                          } ${isCurrentWeekVirtue ? 'ring-2 ring-[#1a252f]/40' : ''}`}
                         >
                           <div className="text-2xl">
                             {response === true ? '✓' : response === false ? '✗' : '○'}
@@ -5048,12 +5048,12 @@ const HabitGoalTracker = () => {
                           <div className="flex-1">
                             <div className="flex items-center gap-2">
                               <span className={`font-semibold ${
-                                response === true ? 'text-green-800' : response === false ? 'text-red-800' : 'text-gray-600'
+                                response === true ? 'text-[#4b5320]' : response === false ? 'text-red-800' : 'text-gray-600'
                               }`}>
                                 {virtue.virtue}
                               </span>
                               {isCurrentWeekVirtue && (
-                                <span className="text-xs text-blue-600 bg-blue-100 px-2 py-1 rounded">This Week's Focus</span>
+                                <span className="text-xs text-[#1a252f] bg-[#1a252f]/20 px-2 py-1 rounded">This Week's Focus</span>
                               )}
                             </div>
                             <div className="text-sm text-gray-600">
@@ -5075,7 +5075,7 @@ const HabitGoalTracker = () => {
                     
                     <button
                       onClick={completeVirtueCheckIn}
-                      className="px-8 py-3 rounded-lg bg-blue-600 text-white font-medium hover:bg-blue-700 transition-colors"
+                      className="px-8 py-3 rounded-lg bg-[#1a252f] text-white font-medium hover:bg-[#1a252f] transition-colors"
                     >
                       Complete Check-in
                     </button>
@@ -5118,7 +5118,7 @@ const HabitGoalTracker = () => {
                           <span className="text-xs text-[#333333] opacity-70">{habit.description}</span>
                         )}
                         {isComplete && getCompletionTimeDisplay(habit.id, getTodayString()) && (
-                          <span className="text-xs text-green-600 font-mono">
+                          <span className="text-xs text-[#4b5320] font-mono">
                             Completed in {getCompletionTimeDisplay(habit.id, getTodayString())}m
                           </span>
                         )}
@@ -5135,11 +5135,11 @@ const HabitGoalTracker = () => {
                           {activeTimers[habit.id] ? (
                             <>
                               {habit.duration ? (
-                                <span className="text-xs bg-blue-500 text-white px-2 py-1 font-mono rounded">
+                                <span className="text-xs bg-[#1a252f]/100 text-white px-2 py-1 font-mono rounded">
                                   {formatMinutesToHours(getTimerTimeRemaining(habit.id))}
                                 </span>
                               ) : (
-                                <span className="text-xs bg-green-500 text-white px-2 py-1 font-mono rounded">
+                                <span className="text-xs bg-[#4b5320]/100 text-white px-2 py-1 font-mono rounded">
                                   {formatMinutesToHours(Math.floor((Date.now() - activeTimers[habit.id]) / 1000 / 60))}
                                 </span>
                               )}
@@ -5148,10 +5148,10 @@ const HabitGoalTracker = () => {
                                   stopTimer(habit.id, true);
                                   toggleHabitCompletion(habit.id, getTodayString());
                                 }}
-                                className="p-1 hover:bg-green-100 rounded transition-colors"
+                                className="p-1 hover:bg-[#4b5320]/20 rounded transition-colors"
                                 title="Complete Habit"
                               >
-                                <Check size={14} strokeWidth={2.5} className="text-green-600" />
+                                <Check size={14} strokeWidth={2.5} className="text-[#4b5320]" />
                               </button>
                               <button
                                 onClick={() => stopTimer(habit.id, false)}
@@ -5164,18 +5164,18 @@ const HabitGoalTracker = () => {
                           ) : habit.duration ? (
                             <button
                               onClick={() => startTimer(habit.id, habit.duration)}
-                              className="p-1 hover:bg-green-100 rounded transition-colors"
+                              className="p-1 hover:bg-[#4b5320]/20 rounded transition-colors"
                               title="Start Timer"
                             >
-                              <div className="w-3 h-3 bg-green-500 rounded-full"></div>
+                              <div className="w-3 h-3 bg-[#4b5320]/100 rounded-full"></div>
                             </button>
                           ) : habit.expectedCompletionTime ? (
                             <button
                               onClick={() => startUncappedTimer(habit.id)}
-                              className="p-1 hover:bg-green-100 rounded transition-colors"
+                              className="p-1 hover:bg-[#4b5320]/20 rounded transition-colors"
                               title="Start Timer"
                             >
-                              <div className="w-3 h-3 bg-green-500 rounded-full"></div>
+                              <div className="w-3 h-3 bg-[#4b5320]/100 rounded-full"></div>
                             </button>
                           ) : null}
                           {getAverageCompletionTime(habit.id) && (
@@ -5659,7 +5659,7 @@ const HabitGoalTracker = () => {
                               <span className="font-medium text-[#333333]">{routine.name}</span>
                               <span className={`text-xs px-2 py-1 rounded font-mono ${
                                 completion.completed 
-                                  ? 'bg-green-200 text-green-800' 
+                                  ? 'bg-[#4b5320]/30 text-[#4b5320]' 
                                   : 'bg-orange-200 text-orange-800'
                               }`}>
                                 {completion.completed ? 'Completed' : 'Abandoned'}
@@ -5674,7 +5674,7 @@ const HabitGoalTracker = () => {
                                 {completion.estimatedTime && (
                                   <p className={`font-medium ${
                                     completion.totalTime <= completion.estimatedTime 
-                                      ? 'text-green-600' 
+                                      ? 'text-[#4b5320]' 
                                       : 'text-orange-600'
                                   }`}>
                                     {completion.totalTime <= completion.estimatedTime ? '✓' : '⚠'} 
@@ -6166,9 +6166,9 @@ const HabitGoalTracker = () => {
                           <p className="text-2xl font-bold text-[#333333] font-mono">{completedVirtueChecks}</p>
                           <p className="text-xs text-[#333333] opacity-70 uppercase tracking-wider mt-1">Days Checked</p>
                         </div>
-                        <div className="text-center p-3 bg-blue-50 rounded-lg border-2 border-blue-200">
-                          <p className="text-2xl font-bold text-blue-800 font-mono">{completedChallenges}</p>
-                          <p className="text-xs text-blue-800 uppercase tracking-wider mt-1">Challenges</p>
+                        <div className="text-center p-3 bg-[#1a252f]/10 rounded-lg border-2 border-[#1a252f]/30">
+                          <p className="text-2xl font-bold text-[#1a252f] font-mono">{completedChallenges}</p>
+                          <p className="text-xs text-[#1a252f] uppercase tracking-wider mt-1">Challenges</p>
                         </div>
                       </>
                     );
@@ -6187,7 +6187,7 @@ const HabitGoalTracker = () => {
                         {getWeekDays(currentWeekStart).map((date, index) => {
                           const isToday = date.toDateString() === new Date().toDateString();
                           return (
-                            <th key={index} className={`text-center p-2 border-b border-stone-200 font-semibold text-[#333333] ${isToday ? 'bg-blue-50' : ''}`}>
+                            <th key={index} className={`text-center p-2 border-b border-stone-200 font-semibold text-[#333333] ${isToday ? 'bg-[#1a252f]/10' : ''}`}>
                               <div className="text-xs uppercase tracking-wider">
                                 {date.toLocaleDateString('en-US', { weekday: 'short' })}
                               </div>
@@ -6213,9 +6213,9 @@ const HabitGoalTracker = () => {
                               const isToday = date.toDateString() === new Date().toDateString();
                               
                               return (
-                                <td key={dayIndex} className={`text-center p-2 ${isToday ? 'bg-blue-50' : ''}`}>
+                                <td key={dayIndex} className={`text-center p-2 ${isToday ? 'bg-[#1a252f]/10' : ''}`}>
                                   {virtueResponse === true ? (
-                                    <span className="text-green-600 text-lg font-bold">✓</span>
+                                    <span className="text-[#4b5320] text-lg font-bold">✓</span>
                                   ) : (
                                     <span className="text-stone-300 text-lg">○</span>
                                   )}
@@ -6226,7 +6226,7 @@ const HabitGoalTracker = () => {
                         );
                       })}
                       {/* Challenges Row */}
-                      <tr className="border-t-2 border-stone-300 bg-blue-50">
+                      <tr className="border-t-2 border-stone-300 bg-[#1a252f]/10">
                         <td className="p-2 font-bold text-[#333333] text-sm">
                           Daily Challenges
                         </td>
@@ -6237,9 +6237,9 @@ const HabitGoalTracker = () => {
                           const isCompleted = dailyChallenge?.completed === true;
                           
                           return (
-                            <td key={dayIndex} className={`text-center p-2 ${isToday ? 'bg-blue-100' : ''}`}>
+                            <td key={dayIndex} className={`text-center p-2 ${isToday ? 'bg-[#1a252f]/20' : ''}`}>
                               {isCompleted ? (
-                                <span className="text-blue-600 text-lg font-bold">✓</span>
+                                <span className="text-[#1a252f] text-lg font-bold">✓</span>
                               ) : (
                                 <span className="text-stone-300 text-lg">○</span>
                               )}
@@ -6272,11 +6272,11 @@ const HabitGoalTracker = () => {
         </div>
         
         {/* Current Week's Focus */}
-        <div className="bg-blue-50 rounded-xl shadow-md p-6 border-2 border-blue-200">
+        <div className="bg-[#1a252f]/10 rounded-xl shadow-md p-6 border-2 border-[#1a252f]/30">
           <div className="text-center">
-            <h3 className="text-xl font-bold text-blue-800 mb-2">This Week's Focus</h3>
+            <h3 className="text-xl font-bold text-[#1a252f] mb-2">This Week's Focus</h3>
             <p className="text-2xl font-bold text-[#333333] mb-2">{currentWeeklyFocus.virtue}</p>
-            <p className="text-lg text-blue-700 mb-4">{currentWeeklyFocus.focus}</p>
+            <p className="text-lg text-[#1a252f] mb-4">{currentWeeklyFocus.focus}</p>
             <p className="text-sm text-gray-600 leading-relaxed">{currentWeeklyFocus.description}</p>
           </div>
         </div>
@@ -6296,7 +6296,7 @@ const HabitGoalTracker = () => {
               </div>
               <div className="w-full bg-stone-200 h-4 rounded-full">
                 <div
-                  className="bg-blue-600 h-4 rounded-full transition-all"
+                  className="bg-[#1a252f] h-4 rounded-full transition-all"
                   style={{ width: `${Math.round((checkedVirtuesCount / weeklyFocuses.length) * 100)}%` }}
                 ></div>
               </div>
@@ -6304,7 +6304,7 @@ const HabitGoalTracker = () => {
             
             <button
               onClick={startVirtueCheckIn}
-              className="px-8 py-4 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 transition-colors text-lg"
+              className="px-8 py-4 bg-[#1a252f] text-white font-bold rounded-lg hover:bg-[#1a252f] transition-colors text-lg"
             >
               {hasCheckedVirtues ? 'Continue Check-in' : 'Start Check-in'}
             </button>
@@ -6325,11 +6325,11 @@ const HabitGoalTracker = () => {
                     key={virtue.virtue}
                     className={`flex items-center gap-4 p-3 rounded-lg border-2 ${
                       response === true 
-                        ? 'bg-green-50 border-green-200' 
+                        ? 'bg-[#4b5320]/10 border-[#4b5320]/30' 
                         : response === false 
                           ? 'bg-red-50 border-red-200' 
                           : 'bg-gray-50 border-gray-200'
-                    } ${isCurrentWeekVirtue ? 'ring-2 ring-blue-300' : ''}`}
+                    } ${isCurrentWeekVirtue ? 'ring-2 ring-[#1a252f]/40' : ''}`}
                   >
                     <div className="text-xl">
                       {response === true ? '✓' : response === false ? '✗' : '○'}
@@ -6337,12 +6337,12 @@ const HabitGoalTracker = () => {
                     <div className="flex-1 text-left">
                       <div className="flex items-center gap-2">
                         <span className={`font-semibold ${
-                          response === true ? 'text-green-800' : response === false ? 'text-red-800' : 'text-gray-600'
+                          response === true ? 'text-[#4b5320]' : response === false ? 'text-red-800' : 'text-gray-600'
                         }`}>
                           {virtue.virtue}
                         </span>
                         {isCurrentWeekVirtue && (
-                          <span className="text-xs text-blue-600 bg-blue-100 px-2 py-1 rounded">This Week's Focus</span>
+                          <span className="text-xs text-[#1a252f] bg-[#1a252f]/20 px-2 py-1 rounded">This Week's Focus</span>
                         )}
                       </div>
                       <div className="text-sm text-gray-600">
@@ -6579,7 +6579,7 @@ const HabitGoalTracker = () => {
                     <h3 className="text-2xl font-bold text-[#333333] mb-2">
                       {weeklyFocuses[currentVirtueIndex]?.virtue}
                     </h3>
-                    <p className="text-lg text-blue-800 mb-6 font-medium">
+                    <p className="text-lg text-[#1a252f] mb-6 font-medium">
                       {weeklyFocuses[currentVirtueIndex]?.focus}
                     </p>
                     <div className="text-left mb-8">
@@ -6594,8 +6594,8 @@ const HabitGoalTracker = () => {
                         onClick={() => selectVirtueResponse(weeklyFocuses[currentVirtueIndex]?.virtue, true)}
                         className={`px-8 py-4 rounded-xl text-lg font-semibold transition-all duration-200 ${
                           tempVirtueResponses[weeklyFocuses[currentVirtueIndex]?.virtue] === true
-                            ? 'bg-green-600 text-white shadow-lg transform scale-105'
-                            : 'bg-green-100 text-green-700 hover:bg-green-200'
+                            ? 'bg-[#4b5320] text-white shadow-lg transform scale-105'
+                            : 'bg-[#4b5320]/20 text-[#4b5320] hover:bg-[#4b5320]/30'
                         }`}
                       >
                         ✓ Yes
@@ -6652,11 +6652,11 @@ const HabitGoalTracker = () => {
                             key={virtue.virtue}
                             className={`flex items-center gap-4 p-3 rounded-lg border-2 ${
                               response === true 
-                                ? 'bg-green-50 border-green-200' 
+                                ? 'bg-[#4b5320]/10 border-[#4b5320]/30' 
                                 : response === false 
                                   ? 'bg-red-50 border-red-200' 
                                   : 'bg-gray-50 border-gray-200'
-                            } ${isCurrentWeekVirtue ? 'ring-2 ring-blue-300' : ''}`}
+                            } ${isCurrentWeekVirtue ? 'ring-2 ring-[#1a252f]/40' : ''}`}
                           >
                             <div className="text-xl">
                               {response === true ? '✓' : response === false ? '✗' : '○'}
@@ -6664,12 +6664,12 @@ const HabitGoalTracker = () => {
                             <div className="flex-1 text-left">
                               <div className="flex items-center gap-2">
                                 <span className={`font-semibold ${
-                                  response === true ? 'text-green-800' : response === false ? 'text-red-800' : 'text-gray-600'
+                                  response === true ? 'text-[#4b5320]' : response === false ? 'text-red-800' : 'text-gray-600'
                                 }`}>
                                   {virtue.virtue}
                                 </span>
                                 {isCurrentWeekVirtue && (
-                                  <span className="text-xs text-blue-600 bg-blue-100 px-2 py-1 rounded">This Week's Focus</span>
+                                  <span className="text-xs text-[#1a252f] bg-[#1a252f]/20 px-2 py-1 rounded">This Week's Focus</span>
                                 )}
                               </div>
                               <div className="text-sm text-gray-600">
@@ -6688,21 +6688,21 @@ const HabitGoalTracker = () => {
                       
                       if (dailyChallenge && dailyChallenge.completed) {
                         return (
-                          <div className="mt-6 p-4 bg-blue-50 border-2 border-blue-200 rounded-lg">
+                          <div className="mt-6 p-4 bg-[#1a252f]/10 border-2 border-[#1a252f]/30 rounded-lg">
                             <div className="flex items-center gap-2 mb-2">
-                              <span className="text-blue-600 text-xl">✓</span>
-                              <p className="text-sm font-bold text-blue-800">Daily Challenge Completed!</p>
+                              <span className="text-[#1a252f] text-xl">✓</span>
+                              <p className="text-sm font-bold text-[#1a252f]">Daily Challenge Completed!</p>
                             </div>
-                            <p className="text-sm text-blue-700 mb-1">{dailyChallenge.challenge}</p>
+                            <p className="text-sm text-[#1a252f] mb-1">{dailyChallenge.challenge}</p>
                             <div className="flex items-center gap-2 mt-2">
                               <span className={`inline-block px-2 py-1 text-xs font-medium rounded-full ${
-                                dailyChallenge.difficulty === 'easy' ? 'bg-green-100 text-green-800' :
+                                dailyChallenge.difficulty === 'easy' ? 'bg-[#4b5320]/20 text-[#4b5320]' :
                                 dailyChallenge.difficulty === 'medium' ? 'bg-yellow-100 text-yellow-800' :
                                 'bg-red-100 text-red-800'
                               }`}>
                                 {dailyChallenge.difficulty}
                               </span>
-                              <p className="text-xs text-blue-600">
+                              <p className="text-xs text-[#1a252f]">
                                 Completed at {new Date(dailyChallenge.completedAt).toLocaleTimeString()}
                               </p>
                             </div>
@@ -6722,7 +6722,7 @@ const HabitGoalTracker = () => {
                       
                       <button
                         onClick={completeVirtueCheckIn}
-                        className="px-8 py-3 rounded-lg bg-blue-600 text-white font-medium hover:bg-blue-700 transition-colors"
+                        className="px-8 py-3 rounded-lg bg-[#1a252f] text-white font-medium hover:bg-[#1a252f] transition-colors"
                       >
                         Complete Check-in
                       </button>
@@ -6742,12 +6742,12 @@ const HabitGoalTracker = () => {
                 <h3 className="text-2xl font-bold text-[#333333] mb-4">Today's Daily Challenge</h3>
                 
                 <div className="mb-6">
-                  <div className="bg-blue-50 p-4 rounded-lg mb-4">
-                    <p className="text-lg font-medium text-blue-900 mb-3">{currentChallenge.challenge}</p>
+                  <div className="bg-[#1a252f]/10 p-4 rounded-lg mb-4">
+                    <p className="text-lg font-medium text-[#1a252f] mb-3">{currentChallenge.challenge}</p>
                     <div className="flex items-center gap-3">
-                      <span className="text-sm text-blue-700">Virtue: <strong>{currentChallenge.virtue}</strong></span>
+                      <span className="text-sm text-[#1a252f]">Virtue: <strong>{currentChallenge.virtue}</strong></span>
                       <span className={`inline-block px-3 py-1 text-sm font-medium rounded-full ${
-                        currentChallenge.difficulty === 'easy' ? 'bg-green-100 text-green-800' :
+                        currentChallenge.difficulty === 'easy' ? 'bg-[#4b5320]/20 text-[#4b5320]' :
                         currentChallenge.difficulty === 'medium' ? 'bg-yellow-100 text-yellow-800' :
                         'bg-red-100 text-red-800'
                       }`}>
@@ -6770,7 +6770,7 @@ const HabitGoalTracker = () => {
                   </button>
                   <button
                     onClick={acceptDailyChallenge}
-                    className="flex-1 px-6 py-3 rounded-lg bg-blue-600 text-white font-medium hover:bg-blue-700 transition-colors"
+                    className="flex-1 px-6 py-3 rounded-lg bg-[#1a252f] text-white font-medium hover:bg-[#1a252f] transition-colors"
                   >
                     Accept Challenge
                   </button>
