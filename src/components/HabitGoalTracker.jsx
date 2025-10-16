@@ -448,9 +448,20 @@ const HabitGoalTracker = () => {
     return completion.duration ? Math.round(completion.duration * 10) / 10 : null;
   };
 
-  // Get date string for selected date
+  // Get date string for selected date (using local timezone)
   const getSelectedDateString = (date) => {
-    return date.toISOString().split('T')[0];
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  // Helper function to get date string in local timezone (replaces toISOString().split('T')[0])
+  const getDateStringLocal = (date) => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
   };
 
   // Helper function to safely get array data
@@ -2537,9 +2548,9 @@ const HabitGoalTracker = () => {
     yesterday.setDate(yesterday.getDate() - 1);
     
     const targetDate = new Date(date);
-    const todayString = today.toISOString().split('T')[0];
-    const yesterdayString = yesterday.toISOString().split('T')[0];
-    const targetDateString = targetDate.toISOString().split('T')[0];
+    const todayString = getDateStringLocal(today);
+    const yesterdayString = getDateStringLocal(yesterday);
+    const targetDateString = getDateStringLocal(targetDate);
     
     return targetDateString === todayString || targetDateString === yesterdayString;
   };
@@ -3278,7 +3289,7 @@ const HabitGoalTracker = () => {
     }
     
     while (true) {
-      const dateString = date.toISOString().split('T')[0];
+      const dateString = getDateStringLocal(date);
       const completion = habitCompletions[dateString]?.[habitId];
       if (completion?.completed) {
         streak++;
@@ -3941,7 +3952,7 @@ const HabitGoalTracker = () => {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `growth-tracker-backup-${currentUser?.name || 'user'}-${new Date().toISOString().split('T')[0]}.json`;
+    link.download = `growth-tracker-backup-${currentUser?.name || 'user'}-${getDateStringLocal(new Date())}.json`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -5334,7 +5345,7 @@ const HabitGoalTracker = () => {
     
     // Get date string
     const getDateString = (date) => {
-      return date.toISOString().split('T')[0];
+      return getDateStringLocal(date);
     };
     
     // Get habits for a specific date
@@ -5976,7 +5987,7 @@ const HabitGoalTracker = () => {
     const weekData = {};
     
     weekDays.forEach(date => {
-      const dateStr = date.toISOString().split('T')[0];
+      const dateStr = getDateStringLocal(date);
       weekData[dateStr] = virtueCheckIns[dateStr] || {};
     });
     
@@ -6017,7 +6028,7 @@ const HabitGoalTracker = () => {
     
     // Get virtue check-in completion rate for a date
     const getVirtueCompletionRate = (date) => {
-      const dateStr = date.toISOString().split('T')[0];
+      const dateStr = getDateStringLocal(date);
       const virtues = virtueCheckIns[dateStr] || {};
       const checkedCount = Object.values(virtues).filter(Boolean).length;
       return Math.round((checkedCount / weeklyFocuses.length) * 100);
@@ -6128,7 +6139,7 @@ const HabitGoalTracker = () => {
                     let totalVirtueChecks = 0;
                     let completedVirtueChecks = 0;
                     weekDays.forEach(date => {
-                      const dateStr = date.toISOString().split('T')[0];
+                      const dateStr = getDateStringLocal(date);
                       const virtues = weekData[dateStr] || {};
                       const checked = Object.values(virtues).filter(Boolean).length;
                       if (checked > 0) completedVirtueChecks++;
@@ -6138,7 +6149,7 @@ const HabitGoalTracker = () => {
                     // Calculate challenge completions
                     let completedChallenges = 0;
                     weekDays.forEach(date => {
-                      const dateStr = date.toISOString().split('T')[0];
+                      const dateStr = getDateStringLocal(date);
                       const challenge = dailyChallenges[dateStr];
                       if (challenge?.completed) completedChallenges++;
                     });
@@ -6197,7 +6208,7 @@ const HabitGoalTracker = () => {
                               {virtue.virtue}
                             </td>
                             {getWeekDays(currentWeekStart).map((date, dayIndex) => {
-                              const dateStr = date.toISOString().split('T')[0];
+                              const dateStr = getDateStringLocal(date);
                               const virtueResponse = weekData[dateStr]?.[virtue.virtue];
                               const isToday = date.toDateString() === new Date().toDateString();
                               
@@ -6220,7 +6231,7 @@ const HabitGoalTracker = () => {
                           Daily Challenges
                         </td>
                         {getWeekDays(currentWeekStart).map((date, dayIndex) => {
-                          const dateStr = date.toISOString().split('T')[0];
+                          const dateStr = getDateStringLocal(date);
                           const dailyChallenge = dailyChallenges[dateStr];
                           const isToday = date.toDateString() === new Date().toDateString();
                           const isCompleted = dailyChallenge?.completed === true;
