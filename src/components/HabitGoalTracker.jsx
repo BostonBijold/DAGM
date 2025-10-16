@@ -2666,14 +2666,53 @@ const HabitGoalTracker = () => {
 
   // Get routine completion percentage
   const getRoutineCompletionPercentage = (routineId, dateString = null) => {
-    // Completion calculations removed - always return 0
-    return 0;
+    const today = dateString || getTodayString();
+    const routine = routines.find(r => r.id === routineId);
+    
+    if (!routine || !routine.habits || routine.habits.length === 0) {
+      return 0;
+    }
+    
+    const todayHabitCompletions = habitCompletions[today] || {};
+    const completedHabits = routine.habits.filter(habitId => 
+      todayHabitCompletions[habitId]?.completed === true
+    );
+    
+    const percentage = Math.round((completedHabits.length / routine.habits.length) * 100);
+    return percentage;
   };
 
   // Get routine completion stats
   const getRoutineCompletionStats = (routineId, dateString = null) => {
-    // Completion calculations removed - return default empty stats
-    return { completed: false, totalTime: 0, percentage: 0 };
+    const today = dateString || getTodayString();
+    const routine = routines.find(r => r.id === routineId);
+    
+    if (!routine || !routine.habits || routine.habits.length === 0) {
+      return { completed: false, totalTime: 0, percentage: 0 };
+    }
+    
+    const todayHabitCompletions = habitCompletions[today] || {};
+    const completedHabits = routine.habits.filter(habitId => 
+      todayHabitCompletions[habitId]?.completed === true
+    );
+    
+    const percentage = Math.round((completedHabits.length / routine.habits.length) * 100);
+    const completed = completedHabits.length === routine.habits.length;
+    
+    // Calculate total time from completed habits
+    let totalTime = 0;
+    completedHabits.forEach(habitId => {
+      const habitCompletion = todayHabitCompletions[habitId];
+      if (habitCompletion?.duration) {
+        totalTime += habitCompletion.duration;
+      }
+    });
+    
+    return { 
+      completed, 
+      totalTime: Math.round(totalTime * 10) / 10, 
+      percentage 
+    };
   };
 
   // Get next incomplete routine based on time and completion
@@ -3229,11 +3268,34 @@ const HabitGoalTracker = () => {
 
   // Calculate total routine duration from habit durations
   const calculateRoutineDuration = (routineId) => {
-    // Duration calculations removed - return empty data
+    const routine = routines.find(r => r.id === routineId);
+    if (!routine || !routine.habits) {
+      return {
+        totalDuration: 0,
+        unknownDurationCount: 0,
+        hasUnknownDurations: false
+      };
+    }
+    
+    const today = getTodayString();
+    const todayHabitCompletions = habitCompletions[today] || {};
+    
+    let totalDuration = 0;
+    let unknownDurationCount = 0;
+    
+    routine.habits.forEach(habitId => {
+      const habitCompletion = todayHabitCompletions[habitId];
+      if (habitCompletion?.duration) {
+        totalDuration += habitCompletion.duration;
+      } else {
+        unknownDurationCount++;
+      }
+    });
+    
     return {
-      totalDuration: 0,
-      unknownDurationCount: 0,
-      hasUnknownDurations: false
+      totalDuration: Math.round(totalDuration * 10) / 10,
+      unknownDurationCount,
+      hasUnknownDurations: unknownDurationCount > 0
     };
   };
 
@@ -3531,8 +3593,54 @@ const HabitGoalTracker = () => {
   };
 
   const finishRoutine = async () => {
-    // Completion tracking removed - do nothing
-    return;
+    if (!activeRoutine) return;
+    
+    const today = getTodayString();
+    
+    // Calculate total duration from all completed habits in the routine
+    const todayHabitCompletions = habitCompletions[today] || {};
+    const habitTimes = {};
+    let totalDuration = 0;
+    
+    activeRoutine.habits.forEach(habitId => {
+      const habitCompletion = todayHabitCompletions[habitId];
+      if (habitCompletion?.duration) {
+        habitTimes[habitId] = habitCompletion.duration;
+        totalDuration += habitCompletion.duration;
+      }
+    });
+    
+    // Create routine completion object
+    const routineCompletion = {
+      completed: true,
+      completedAt: new Date().toISOString(),
+      totalDuration: Math.round(totalDuration * 10) / 10,
+      startTime: routineStartTime ? new Date(routineStartTime).toISOString() : null,
+      endTime: new Date().toISOString(),
+      habitTimes: habitTimes
+    };
+    
+    // Update routine completions state
+    setRoutineCompletions(prev => ({
+      ...prev,
+      [today]: {
+        ...prev[today],
+        [activeRoutine.id]: routineCompletion
+      }
+    }));
+    
+    // Update database
+    await dataService.updateTodayRoutines({ [activeRoutine.id]: routineCompletion }, today);
+    
+    // Clear active routine state
+    setActiveRoutine(null);
+    setActiveRoutineIndex(0);
+    setRoutineStartTime(null);
+    setRoutinePaused(false);
+    setShowRoutineView(false);
+    
+    // Clear active routine from database
+    await dataService.updateActiveRoutine(null, today);
   };
   
   // Add goal
