@@ -125,6 +125,7 @@ const HabitGoalTracker = () => {
   const [dailyChallenges, setDailyChallenges] = useState({});
   const [showChallengeModal, setShowChallengeModal] = useState(false);
   const [currentChallenge, setCurrentChallenge] = useState(null);
+  const [challengesLoading, setChallengesLoading] = useState(false);
   
   // Initialize data from data service
   useEffect(() => {
@@ -179,8 +180,9 @@ const HabitGoalTracker = () => {
   // Load daily challenge when selected date changes
   useEffect(() => {
     const loadDailyChallenge = async () => {
-      if (!dataLoaded || challenges.length === 0) return;
+      if (!dataLoaded) return;
       
+      setChallengesLoading(true);
       try {
         const dateString = getSelectedDateString(selectedDate);
         const dailyChallenge = await dataService.getDailyChallenge(dateString);
@@ -193,11 +195,15 @@ const HabitGoalTracker = () => {
         }
       } catch (error) {
         console.error('Error loading daily challenge:', error);
+        // Set error state for UI feedback
+        setError(`Failed to load daily challenge: ${error.message}`);
+      } finally {
+        setChallengesLoading(false);
       }
     };
 
     loadDailyChallenge();
-  }, [selectedDate, dataLoaded, challenges]);
+  }, [selectedDate, dataLoaded]);
 
   // Timer update effect - updates every second when there are active or paused timers
   useEffect(() => {
@@ -267,6 +273,7 @@ const HabitGoalTracker = () => {
       setDashboardOrder(validatedDashboardOrder);
       setVirtueCheckIns({ [todayString]: virtueCheckInsData || {} });
       setChallenges(challengesData || []);
+      setChallengesLoading(false); // Ensure loading state is cleared after initial load
       
       // Return the loaded data for validation
       return {
@@ -2426,10 +2433,16 @@ const HabitGoalTracker = () => {
     const weeklyFocus = getWeeklyFocus();
     const dayOfWeek = date.getDay(); // 0 = Sunday, 1 = Monday, etc.
     
-    if (challenges.length === 0) return null;
+    if (challenges.length === 0) {
+      console.warn('No challenges available in database');
+      return null;
+    }
     
     const virtueChallenges = challenges.filter(c => c.virtue === weeklyFocus.virtue);
-    if (virtueChallenges.length === 0) return null;
+    if (virtueChallenges.length === 0) {
+      console.warn(`No challenges available for virtue: ${weeklyFocus.virtue}`);
+      return null;
+    }
     
     // Use day of week to select challenge (0-6)
     const challengeIndex = dayOfWeek % virtueChallenges.length;
@@ -2444,10 +2457,14 @@ const HabitGoalTracker = () => {
 
   // Accept daily challenge
   const acceptDailyChallenge = async () => {
-    const todayString = getTodayString(); // Always use today's date for challenges
+    const dateString = getSelectedDateString(selectedDate);
     const challenge = getDailyChallengeForDate(selectedDate);
     
-    if (!challenge) return;
+    if (!challenge) {
+      console.error('No challenge available to accept');
+      setError('No challenge available for this date');
+      return;
+    }
     
     const challengeData = {
       challengeId: challenge.id,
@@ -2456,43 +2473,49 @@ const HabitGoalTracker = () => {
       difficulty: challenge.difficulty,
       accepted: true,
       completed: false,
-      acceptedAt: todayString,
+      acceptedAt: dateString,
       completedAt: null
     };
     
     try {
-      await dataService.updateDailyChallenge(todayString, challengeData);
+      await dataService.updateDailyChallenge(dateString, challengeData);
       setDailyChallenges(prev => ({
         ...prev,
-        [todayString]: challengeData
+        [dateString]: challengeData
       }));
       setShowChallengeModal(false);
     } catch (error) {
       console.error('Error accepting challenge:', error);
+      setError(`Failed to accept challenge: ${error.message}`);
     }
   };
 
   // Complete daily challenge
   const completeDailyChallenge = async () => {
-    const todayString = getTodayString(); // Always use today's date for challenges
+    const dateString = getSelectedDateString(selectedDate);
     const currentChallenge = getCurrentDailyChallenge();
     
-    if (!currentChallenge) return;
+    if (!currentChallenge) {
+      console.error('No challenge to complete');
+      setError('No challenge to complete');
+      return;
+    }
     
     const updatedChallenge = {
       ...currentChallenge,
       completed: true,
-      completedAt: todayString
+      completedAt: dateString
     };
     
     try {
-      await dataService.updateDailyChallenge(todayString, updatedChallenge);
+      await dataService.updateDailyChallenge(dateString, updatedChallenge);
       setDailyChallenges(prev => ({
         ...prev,
-        [todayString]: updatedChallenge
+        [dateString]: updatedChallenge
       }));
     } catch (error) {
       console.error('Error completing challenge:', error);
+      setError(`Failed to complete challenge: ${error.message}`);
     }
   };
 
@@ -2502,6 +2525,8 @@ const HabitGoalTracker = () => {
     if (challenge) {
       setCurrentChallenge(challenge);
       setShowChallengeModal(true);
+    } else {
+      setError('No challenge available for this date');
     }
   };
 
@@ -4070,6 +4095,46 @@ const HabitGoalTracker = () => {
           {(() => {
             const currentChallenge = getCurrentDailyChallenge();
             const canEdit = canCheckInForDate(selectedDate);
+            const availableChallenge = getDailyChallengeForDate(selectedDate);
+            
+            // Show loading state
+            if (challengesLoading) {
+              return (
+                <div className="mt-4 pt-4 border-t border-gray-200">
+                  <div className="bg-gray-50 p-3 rounded-lg">
+                    <p className="text-sm text-gray-600 text-center">
+                      Loading daily challenge...
+                    </p>
+                  </div>
+                </div>
+              );
+            }
+            
+            // Check if no challenges are available
+            if (challenges.length === 0) {
+              return (
+                <div className="mt-4 pt-4 border-t border-gray-200">
+                  <div className="bg-yellow-50 p-3 rounded-lg">
+                    <p className="text-sm text-yellow-800">
+                      <strong>No challenges available.</strong> Please check back later or contact support.
+                    </p>
+                  </div>
+                </div>
+              );
+            }
+            
+            // Check if no challenges available for current virtue
+            if (!availableChallenge) {
+              return (
+                <div className="mt-4 pt-4 border-t border-gray-200">
+                  <div className="bg-yellow-50 p-3 rounded-lg">
+                    <p className="text-sm text-yellow-800">
+                      <strong>No challenges available for {weeklyFocus.virtue}.</strong> Check back tomorrow for new challenges.
+                    </p>
+                  </div>
+                </div>
+              );
+            }
             
             if (!currentChallenge || !currentChallenge.accepted) {
               // Show challenge button if not accepted yet
