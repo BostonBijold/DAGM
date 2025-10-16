@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { LogIn, User } from 'lucide-react';
+import { LogIn, User, Settings } from 'lucide-react';
 import authService from '../services/authService';
+import AdminPanel from './AdminPanel';
 
 const AuthWrapper = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [showUserDropdown, setShowUserDropdown] = useState(false);
+  const [showAdminPanel, setShowAdminPanel] = useState(false);
 
   useEffect(() => {
     // Initialize auth service
@@ -151,6 +153,21 @@ const AuthWrapper = ({ children }) => {
                     <p className="text-sm text-[#333333] opacity-70">{user.email}</p>
                   </div>
                   
+                  {/* Admin Panel Button - Only show for admins */}
+                  {user.isAdmin && (
+                    <div className="border-t border-stone-200 py-2">
+                      <button
+                        onClick={() => {
+                          setShowUserDropdown(false);
+                          setShowAdminPanel(true);
+                        }}
+                        className="w-full px-4 py-3 text-left hover:bg-stone-100 flex items-center gap-3 text-stone-700"
+                      >
+                        <Settings size={18} strokeWidth={2.5} />
+                        <span className="font-medium text-sm">Admin Panel</span>
+                      </button>
+                    </div>
+                  )}
                   
                   <div className="border-t border-stone-200 py-2">
                     <button
@@ -175,6 +192,11 @@ const AuthWrapper = ({ children }) => {
       <div className="max-w-md mx-auto px-4 pt-16 pb-8">
         {children}
       </div>
+
+      {/* Admin Panel Modal */}
+      {showAdminPanel && (
+        <AdminPanel onClose={() => setShowAdminPanel(false)} />
+      )}
     </div>
   );
 };

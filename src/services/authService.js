@@ -33,6 +33,7 @@ class AuthService {
         name: user.displayName,
         email: user.email,
         photoURL: user.photoURL,
+        isAdmin: false, // Will be updated from Firestore
         createdAt: user.metadata.creationTime,
         lastSignIn: user.metadata.lastSignInTime
       };
@@ -92,13 +93,30 @@ class AuthService {
       return;
     }
 
-    onAuthStateChanged(auth, (user) => {
+    onAuthStateChanged(auth, async (user) => {
       if (user) {
+        // Fetch admin status from Firestore
+        let isAdmin = false;
+        try {
+          const { doc, getDoc } = await import('firebase/firestore');
+          const { db } = await import('../config/firebase');
+          if (db) {
+            const userDocRef = doc(db, 'users', user.uid);
+            const userDoc = await getDoc(userDocRef);
+            if (userDoc.exists()) {
+              isAdmin = userDoc.data()?.userInfo?.isAdmin || false;
+            }
+          }
+        } catch (error) {
+          console.warn('Could not fetch admin status:', error);
+        }
+
         this.currentUser = {
           uid: user.uid,
           name: user.displayName,
           email: user.email,
           photoURL: user.photoURL,
+          isAdmin: isAdmin,
           createdAt: user.metadata.creationTime,
           lastSignIn: user.metadata.lastSignInTime
         };

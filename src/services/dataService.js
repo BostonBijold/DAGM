@@ -8,6 +8,8 @@ import {
   query, 
   where, 
   getDocs,
+  addDoc,
+  deleteDoc,
   serverTimestamp 
 } from 'firebase/firestore';
 import { db } from '../config/firebase';
@@ -59,6 +61,7 @@ class DataService {
           name: this.currentUser.name,
           email: this.currentUser.email,
           photoURL: this.currentUser.photoURL,
+          isAdmin: false,
           createdAt: serverTimestamp(),
           lastActive: serverTimestamp()
         },
@@ -824,6 +827,202 @@ class DataService {
   // Clear all data (for testing/reset) - Note: This only clears local state, not Firestore
   clearAllData() {
     console.warn('clearAllData() is not supported in Firestore mode. Data is stored in the cloud.');
+  }
+
+  // Admin check
+  async checkIsAdmin() {
+    try {
+      const userData = await this.getCurrentUserData();
+      console.log('Checking admin status for user:', userData?.userInfo);
+      return userData?.userInfo?.isAdmin || false;
+    } catch (error) {
+      console.error('Error checking admin status:', error);
+      return false;
+    }
+  }
+
+  // Quote CRUD Operations
+  async getQuotes() {
+    try {
+      if (!isFirebaseAvailable()) {
+        throw new Error('Firebase is not configured. Please set up your Firebase project.');
+      }
+
+      const quotesRef = collection(db, 'quotes');
+      const quotesSnapshot = await getDocs(quotesRef);
+      
+      const quotes = [];
+      quotesSnapshot.forEach((doc) => {
+        quotes.push({ id: doc.id, ...doc.data() });
+      });
+      
+      return quotes;
+    } catch (error) {
+      console.error('Error getting quotes:', error);
+      
+      // If it's a permissions error and the collection doesn't exist, return empty array
+      if (error.code === 'permission-denied' || error.message.includes('Missing or insufficient permissions')) {
+        console.warn('Quotes collection may not exist yet, returning empty array');
+        return [];
+      }
+      
+      throw new Error('Failed to load quotes. Please try again.');
+    }
+  }
+
+  async getQuotesByVirtue(virtue) {
+    try {
+      const allQuotes = await this.getQuotes();
+      return allQuotes.filter(quote => quote.virtue === virtue);
+    } catch (error) {
+      console.error('Error getting quotes by virtue:', error);
+      return [];
+    }
+  }
+
+  async addQuote(quoteData) {
+    try {
+      if (!isFirebaseAvailable()) {
+        throw new Error('Firebase is not configured. Please set up your Firebase project.');
+      }
+
+      const isAdmin = await this.checkIsAdmin();
+      if (!isAdmin) {
+        throw new Error('Only admins can add quotes.');
+      }
+
+      const quotesRef = collection(db, 'quotes');
+      const docRef = await addDoc(quotesRef, {
+        ...quoteData,
+        createdAt: serverTimestamp()
+      });
+      
+      return { id: docRef.id, ...quoteData };
+    } catch (error) {
+      console.error('Error adding quote:', error);
+      throw new Error('Failed to add quote. Please try again.');
+    }
+  }
+
+  async updateQuote(quoteId, quoteData) {
+    try {
+      if (!isFirebaseAvailable()) {
+        throw new Error('Firebase is not configured. Please set up your Firebase project.');
+      }
+
+      const isAdmin = await this.checkIsAdmin();
+      if (!isAdmin) {
+        throw new Error('Only admins can update quotes.');
+      }
+
+      const quoteRef = doc(db, 'quotes', quoteId);
+      await updateDoc(quoteRef, {
+        ...quoteData,
+        updatedAt: serverTimestamp()
+      });
+      
+      return { id: quoteId, ...quoteData };
+    } catch (error) {
+      console.error('Error updating quote:', error);
+      throw new Error('Failed to update quote. Please try again.');
+    }
+  }
+
+  async deleteQuote(quoteId) {
+    try {
+      if (!isFirebaseAvailable()) {
+        throw new Error('Firebase is not configured. Please set up your Firebase project.');
+      }
+
+      const isAdmin = await this.checkIsAdmin();
+      if (!isAdmin) {
+        throw new Error('Only admins can delete quotes.');
+      }
+
+      const quoteRef = doc(db, 'quotes', quoteId);
+      await deleteDoc(quoteRef);
+      
+      return true;
+    } catch (error) {
+      console.error('Error deleting quote:', error);
+      throw new Error('Failed to delete quote. Please try again.');
+    }
+  }
+
+  // Challenge CRUD Operations
+  async addChallenge(challengeData) {
+    try {
+      if (!isFirebaseAvailable()) {
+        throw new Error('Firebase is not configured. Please set up your Firebase project.');
+      }
+
+      console.log('Attempting to add challenge:', challengeData);
+      const isAdmin = await this.checkIsAdmin();
+      console.log('Admin check result:', isAdmin);
+      
+      if (!isAdmin) {
+        throw new Error('Only admins can add challenges.');
+      }
+
+      const challengesRef = collection(db, 'dailyChallenges');
+      console.log('Adding challenge to collection:', challengesRef);
+      
+      const docRef = await addDoc(challengesRef, {
+        ...challengeData,
+        createdAt: serverTimestamp()
+      });
+      
+      console.log('Challenge added successfully with ID:', docRef.id);
+      return { id: docRef.id, ...challengeData };
+    } catch (error) {
+      console.error('Error adding challenge:', error);
+      throw new Error(`Failed to add challenge: ${error.message}`);
+    }
+  }
+
+  async updateChallenge(challengeId, challengeData) {
+    try {
+      if (!isFirebaseAvailable()) {
+        throw new Error('Firebase is not configured. Please set up your Firebase project.');
+      }
+
+      const isAdmin = await this.checkIsAdmin();
+      if (!isAdmin) {
+        throw new Error('Only admins can update challenges.');
+      }
+
+      const challengeRef = doc(db, 'dailyChallenges', challengeId);
+      await updateDoc(challengeRef, {
+        ...challengeData,
+        updatedAt: serverTimestamp()
+      });
+      
+      return { id: challengeId, ...challengeData };
+    } catch (error) {
+      console.error('Error updating challenge:', error);
+      throw new Error('Failed to update challenge. Please try again.');
+    }
+  }
+
+  async deleteChallenge(challengeId) {
+    try {
+      if (!isFirebaseAvailable()) {
+        throw new Error('Firebase is not configured. Please set up your Firebase project.');
+      }
+
+      const isAdmin = await this.checkIsAdmin();
+      if (!isAdmin) {
+        throw new Error('Only admins can delete challenges.');
+      }
+
+      const challengeRef = doc(db, 'dailyChallenges', challengeId);
+      await deleteDoc(challengeRef);
+      
+      return true;
+    } catch (error) {
+      console.error('Error deleting challenge:', error);
+      throw new Error('Failed to delete challenge. Please try again.');
+    }
   }
 
   // Migrate data to new unified completion structure

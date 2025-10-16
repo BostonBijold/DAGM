@@ -6,10 +6,24 @@ service cloud.firestore {
       allow read, write: if request.auth != null && request.auth.uid == userId;
     }
     
-    // Allow all users to read challenges
+    // Allow all users to read challenges and quotes
     match /dailyChallenges/{challengeId} {
       allow read: if request.auth != null;
-      allow write: if false; // Only admins can write (upload script completed)
+      allow write: if request.auth != null && 
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.userInfo.isAdmin == true;
+    }
+    
+    match /quotes/{quoteId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && 
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.userInfo.isAdmin == true;
+    }
+    
+    // Allow reading from quotes collection even if it doesn't exist yet
+    match /quotes {
+      allow read: if request.auth != null;
     }
   }
 }
