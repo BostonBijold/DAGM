@@ -133,7 +133,7 @@ const AuthWrapper = ({ children }) => {
             {/* Center: App Title */}
             <div className="flex-1 flex justify-center">
               <h1 className="text-sm sm:text-lg font-bold text-white tracking-tight">
-                GROWTH TRACKER
+                Be One.
               </h1>
             </div>
             
