@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Check, Circle, Plus, X, ChevronRight, Home, Target, Calendar, CheckSquare, Edit2, Trash2, Download, Upload, TrendingUp, ChevronLeft, User, Play, Pause, SkipBack, SkipForward, CheckCircle, GripVertical, AlertTriangle, RefreshCw, CheckCircle2 } from 'lucide-react';
+import { Check, Circle, Plus, X, ChevronRight, Home, Target, Calendar, CheckSquare, Edit2, Trash2, Download, Upload, TrendingUp, ChevronLeft, User, Play, SkipBack, SkipForward, CheckCircle, GripVertical, AlertTriangle, RefreshCw, CheckCircle2 } from 'lucide-react';
 import dataService from '../services/dataService';
 import authService from '../services/authService';
+import ActiveRoutineScreen from './ActiveRoutineScreen';
+import VirtueCheckInModal from './VirtueCheckInModal';
 
 const HabitGoalTracker = () => {
   const [currentView, setCurrentView] = useState('dashboard');
@@ -13,8 +15,13 @@ const HabitGoalTracker = () => {
     const mins = Math.floor(minutes % 60);
     return `${hours}:${mins.toString().padStart(2, '0')}`;
   };
-  const [showRoutineView, setShowRoutineView] = useState(false);
-  const [openRoutines, setOpenRoutines] = useState(new Set()); // Set of routine IDs that are open
+
+  // Utility function to check if active routine is from previous day
+  const isRoutineFromPreviousDay = (routineStartTime) => {
+    const routineDate = new Date(routineStartTime).toDateString();
+    const today = new Date().toDateString();
+    return routineDate !== today;
+  };
   const [showGoalModal, setShowGoalModal] = useState(false);
   const [showTaskModal, setShowTaskModal] = useState(false);
   const [selectedGoalForTask, setSelectedGoalForTask] = useState(null);
@@ -29,7 +36,6 @@ const HabitGoalTracker = () => {
   const [editingHabit, setEditingHabit] = useState(null);
   const [activeTimers, setActiveTimers] = useState({});
   const [timerDurations, setTimerDurations] = useState({});
-  const [pausedTimers, setPausedTimers] = useState({}); // Track paused timers with elapsed time
   const [showHistory, setShowHistory] = useState(false);
   const [timerUpdateTrigger, setTimerUpdateTrigger] = useState(0);
   const [showUserManager, setShowUserManager] = useState(false);
@@ -45,10 +51,6 @@ const HabitGoalTracker = () => {
   const [showOrderRoutinesModal, setShowOrderRoutinesModal] = useState(false);
   const [showAddChoiceModal, setShowAddChoiceModal] = useState(false);
   
-  // Virtue check-in pagination state
-  const [currentVirtueIndex, setCurrentVirtueIndex] = useState(0);
-  const [tempVirtueResponses, setTempVirtueResponses] = useState({});
-  const [showVirtueSummary, setShowVirtueSummary] = useState(false);
   
   // Fallback quotes if no quotes are loaded from Firestore
   const fallbackQuotes = [
@@ -117,7 +119,6 @@ const HabitGoalTracker = () => {
   const [activeRoutine, setActiveRoutine] = useState(null); // Currently running routine
   const [activeRoutineIndex, setActiveRoutineIndex] = useState(0); // Current habit index
   const [routineStartTime, setRoutineStartTime] = useState(null);
-  const [routinePaused, setRoutinePaused] = useState(false);
   const [routineCompletions, setRoutineCompletions] = useState({}); // Now contains full completion objects
   const [expandedRoutines, setExpandedRoutines] = useState(new Set());
   const [selectedDate, setSelectedDate] = useState(new Date());
@@ -216,19 +217,18 @@ const HabitGoalTracker = () => {
     loadDailyChallenge();
   }, [selectedDate, dataLoaded]);
 
-  // Timer update effect - updates every second when there are active or paused timers
+  // Timer update effect - updates every second when there are active timers
   useEffect(() => {
     const hasActiveTimers = Object.keys(activeTimers).length > 0;
-    const hasPausedTimers = Object.keys(pausedTimers).length > 0;
     
-    if (hasActiveTimers || hasPausedTimers) {
+    if (hasActiveTimers) {
       const interval = setInterval(() => {
         setTimerUpdateTrigger(prev => prev + 1);
       }, 1000); // Update every second
       
       return () => clearInterval(interval);
     }
-  }, [activeTimers, pausedTimers]);
+  }, [activeTimers]);
 
   // Load user data from data service
   const loadUserData = async () => {
@@ -323,37 +323,80 @@ const HabitGoalTracker = () => {
       if (activeHabitTimers) {
         const restoredTimers = {};
         const restoredDurations = {};
-        const restoredPaused = {};
         
         Object.entries(activeHabitTimers).forEach(([habitId, timerData]) => {
           const startTime = new Date(timerData.startTime).getTime();
           
-          if (timerData.pausedAt) {
-            // Restore paused timer
-            restoredPaused[habitId] = timerData.pausedElapsed;
-          } else {
-            // Restore active timer
-            restoredTimers[habitId] = startTime;
-            if (timerData.duration) {
-              restoredDurations[habitId] = timerData.duration;
-            }
+          // Restore active timer
+          restoredTimers[habitId] = startTime;
+          if (timerData.duration) {
+            restoredDurations[habitId] = timerData.duration;
           }
         });
         
         setActiveTimers(restoredTimers);
         setTimerDurations(restoredDurations);
-        setPausedTimers(restoredPaused);
       }
       
       // Restore active routine
       if (activeRoutineState && activeRoutineState.routineId) {
         const routine = routines.find(r => r.id === activeRoutineState.routineId);
         if (routine) {
-          setActiveRoutine(routine);
-          setActiveRoutineIndex(activeRoutineState.currentHabitIndex);
-          setRoutineStartTime(new Date(activeRoutineState.startTime).getTime());
-          setRoutinePaused(activeRoutineState.paused);
-          setShowRoutineView(true);  // Auto-open routine view when restored
+          // Check if routine is from previous day
+          if (isRoutineFromPreviousDay(activeRoutineState.startTime)) {
+            // Mark current active habit as skipped and finish routine
+            const currentHabitId = routine.habits[activeRoutineState.currentHabitIndex];
+            if (currentHabitId) {
+              const skipCompletion = {
+                completed: false,
+                completedAt: null,
+                duration: null,
+                startTime: null,
+                endTime: new Date().toISOString(),
+                notes: "Skipped - Previous day"
+              };
+              
+              // Update habit completion
+              setHabitCompletions(prev => ({
+                ...prev,
+                [todayString]: {
+                  ...prev[todayString],
+                  [currentHabitId]: skipCompletion
+                }
+              }));
+              
+              await dataService.updateTodayHabits({ [currentHabitId]: skipCompletion }, todayString);
+            }
+            
+            // Mark routine as finished
+            const routineCompletion = {
+              completed: true,
+              completedAt: new Date().toISOString(),
+              totalDuration: 0,
+              startTime: activeRoutineState.startTime,
+              endTime: new Date().toISOString(),
+              habitTimes: {}
+            };
+            
+            setRoutineCompletions(prev => ({
+              ...prev,
+              [todayString]: {
+                ...prev[todayString],
+                [activeRoutineState.routineId]: routineCompletion
+              }
+            }));
+            
+            await dataService.updateTodayRoutines({ [activeRoutineState.routineId]: routineCompletion }, todayString);
+            
+            // Clear active routine from database
+            await dataService.updateActiveRoutine(null, todayString);
+          } else {
+            // Routine is from today, restore it
+            setActiveRoutine(routine);
+            setActiveRoutineIndex(activeRoutineState.currentHabitIndex);
+            setRoutineStartTime(new Date(activeRoutineState.startTime).getTime());
+            setCurrentView('activeRoutine');  // Auto-open routine view when restored
+          }
         }
       }
     } catch (error) {
@@ -2166,7 +2209,7 @@ const HabitGoalTracker = () => {
         className="relative cursor-pointer hover:scale-105 transition-transform duration-200" 
         style={{ width: size, height: size }}
         onClick={() => handleTimerTap(habitId)}
-        title={activeTimers[habitId] ? "Tap to pause" : pausedTimers[habitId] !== undefined ? "Tap to resume" : "Tap to start"}
+        title={activeTimers[habitId] ? "Timer running" : "Tap to start"}
       >
         <svg
           width={size}
@@ -2219,12 +2262,12 @@ const HabitGoalTracker = () => {
           <div className="text-xs text-[#333333] opacity-60 uppercase tracking-wide mb-2">
             {mode === 'countdown' ? 'remaining' : mode === 'countup' ? 'elapsed' : mode === 'overestimate' ? 'over' : 'ready'}
           </div>
-          {/* Play/Pause Icon */}
+          {/* Play Icon */}
           <div className="text-[#333333] opacity-70">
             {activeTimers[habitId] ? (
-              <Pause size={16} strokeWidth={2.5} />
-            ) : pausedTimers[habitId] !== undefined ? (
-              <Play size={16} strokeWidth={2.5} className="ml-0.5" />
+              <div className="w-4 h-4 border-2 border-[#333333] rounded-full flex items-center justify-center">
+                <div className="w-2 h-2 bg-[#333333] rounded-full"></div>
+              </div>
             ) : (
               <Play size={16} strokeWidth={2.5} className="ml-0.5" />
             )}
@@ -2234,187 +2277,6 @@ const HabitGoalTracker = () => {
     );
   };
 
-  // Routine View Component - Music Player Style
-  const RoutineView = () => {
-    if (openRoutines.size === 0) return null;
-
-    const today = getTodayString();
-    
-    // Get habit completion status
-    const getHabitStatus = (habitId) => {
-      const completion = habitCompletions[today]?.[habitId];
-      const isComplete = completion?.completed || false;
-      const habitTime = completion?.duration || null;
-      return { isComplete, habitTime, habitTimeData: completion };
-    };
-
-    // Get routine completion status
-    const getRoutineStatus = (routineId) => {
-      const routine = routines.find(r => r.id === routineId);
-      if (!routine) return { isComplete: false, completedHabits: 0, totalHabits: 0 };
-      
-      const completedHabits = routine.habits.filter(habitId => {
-        const completion = habitCompletions[today]?.[habitId];
-        return completion?.completed === true;
-      }).length;
-      
-      const isComplete = completedHabits === routine.habits.length;
-      return { isComplete, completedHabits, totalHabits: routine.habits.length };
-    };
-
-    return (
-      <div className="min-h-screen bg-[#333333] text-white">
-        <div className="max-w-md mx-auto bg-white text-[#333333] min-h-screen flex flex-col">
-          {/* Header */}
-          <div className="p-6 border-b border-stone-200">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-bold text-[#333333] uppercase tracking-wide">
-                Open Routines
-              </h2>
-              <button
-                onClick={() => setShowRoutineView(false)}
-                className="p-2 hover:bg-stone-100 rounded-lg transition-colors"
-                title="Close All Routines"
-              >
-                <X size={20} strokeWidth={2.5} className="text-[#333333]" />
-              </button>
-            </div>
-          </div>
-
-          {/* Routines List */}
-          <div className="flex-1 overflow-y-auto p-6">
-            <div className="space-y-4">
-              {Array.from(openRoutines).map(routineId => {
-                const routine = routines.find(r => r.id === routineId);
-                if (!routine) return null;
-                
-                const { isComplete, completedHabits, totalHabits } = getRoutineStatus(routineId);
-                const isActive = activeRoutine && activeRoutine.id === routineId;
-                
-                return (
-                  <div
-                    key={routineId}
-                    className={`border rounded-lg p-4 ${
-                      isActive 
-                        ? 'border-[#1a252f] bg-[#1a252f]/5' 
-                        : isComplete 
-                          ? 'border-[#4b5320] bg-[#4b5320]/5' 
-                          : 'border-stone-200 bg-stone-50'
-                    }`}
-                  >
-                    {/* Routine Header */}
-                    <div className="flex items-center justify-between mb-3">
-                      <div className="flex items-center gap-3">
-                        {isComplete ? (
-                          <CheckCircle className="text-[#4b5320]" size={20} strokeWidth={2.5} />
-                        ) : isActive ? (
-                          <div className="w-5 h-5 border-2 border-[#1a252f] rounded-full flex items-center justify-center">
-                            <div className="w-2 h-2 bg-[#1a252f] rounded-full"></div>
-                          </div>
-                        ) : (
-                          <div className="w-5 h-5 border-2 border-stone-300 rounded-full"></div>
-                        )}
-                        <h3 className={`font-bold ${
-                          isComplete ? 'text-[#4b5320]' : isActive ? 'text-[#1a252f]' : 'text-[#333333]'
-                        }`}>
-                          {routine.name}
-                        </h3>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className={`text-xs px-2 py-1 rounded font-mono ${
-                          isComplete 
-                            ? 'bg-[#4b5320]/30 text-[#4b5320]' 
-                            : isActive 
-                              ? 'bg-[#1a252f]/30 text-[#1a252f]' 
-                              : 'bg-stone-200 text-stone-600'
-                        }`}>
-                          {completedHabits}/{totalHabits}
-                        </span>
-                        <button
-                          onClick={() => closeRoutine(routineId)}
-                          className="p-1 hover:bg-stone-200 rounded transition-colors"
-                          title="Close Routine"
-                        >
-                          <X size={16} strokeWidth={2.5} className="text-[#333333]" />
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Habits List */}
-                    <div className="space-y-2">
-                      {routine.habits.map((habitId, index) => {
-                        const habit = habits.find(h => h.id === habitId);
-                        if (!habit) return null;
-                        
-                        const { isComplete: habitComplete, habitTime } = getHabitStatus(habitId);
-                        const isCurrentHabit = isActive && activeRoutineIndex === index;
-                        
-                        return (
-                          <div
-                            key={habitId}
-                            className={`flex items-center justify-between p-2 rounded ${
-                              isCurrentHabit 
-                                ? 'bg-[#1a252f]/10 border border-[#1a252f]/30' 
-                                : habitComplete 
-                                  ? 'bg-[#4b5320]/10 border border-[#4b5320]/30' 
-                                  : 'bg-stone-100 border border-stone-200'
-                            }`}
-                          >
-                            <div className="flex items-center gap-2">
-                              {habitComplete ? (
-                                <CheckCircle className="text-[#4b5320]" size={16} strokeWidth={2.5} />
-                              ) : isCurrentHabit ? (
-                                <div className="w-4 h-4 border-2 border-[#1a252f] rounded-full flex items-center justify-center">
-                                  <div className="w-1.5 h-1.5 bg-[#1a252f] rounded-full"></div>
-                                </div>
-                              ) : (
-                                <div className="w-4 h-4 border border-stone-300 rounded-full"></div>
-                              )}
-                              <span className={`text-sm ${
-                                habitComplete ? 'text-[#4b5320]' : isCurrentHabit ? 'text-[#1a252f]' : 'text-[#333333]'
-                              }`}>
-                                {habit.name}
-                              </span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              {habitComplete && habitTime && (
-                                <span className="text-xs bg-[#4b5320]/30 text-[#4b5320] px-2 py-1 font-mono rounded">
-                                  {formatMinutesToHours(Math.round(habitTime * 10) / 10)}
-                                </span>
-                              )}
-                              {isCurrentHabit && (
-                                <span className="text-xs bg-[#1a252f]/30 text-[#1a252f] px-2 py-1 font-mono rounded">
-                                  Now
-                                </span>
-                              )}
-                              {habit.duration && !habitComplete && !isCurrentHabit && (
-                                <span className="text-xs bg-stone-200 text-stone-600 px-2 py-1 font-mono rounded">
-                                  {formatMinutesToHours(habit.duration)}
-                                </span>
-                              )}
-                              {!habitComplete && (
-                                <button
-                                  onClick={() => completeRoutineHabit(habitId)}
-                                  className="p-1 hover:bg-[#4b5320]/20 rounded transition-colors"
-                                  title="Mark Complete"
-                                >
-                                  <CheckCircle size={16} strokeWidth={2.5} className="text-[#4b5320]" />
-                                </button>
-                              )}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  };
   
   // Get current day of week
   const getCurrentDay = () => {
@@ -2615,70 +2477,36 @@ const HabitGoalTracker = () => {
   };
 
   // New paginated virtue check-in handlers
-  const selectVirtueResponse = (virtueName, response) => {
-    setTempVirtueResponses(prev => ({
-      ...prev,
-      [virtueName]: response
-    }));
-    
-    // Auto-advance to next virtue after selection
-    setTimeout(() => {
-      goToNextVirtue();
-    }, 300); // Small delay for visual feedback
-  };
 
-  const goToNextVirtue = () => {
-    if (currentVirtueIndex < weeklyFocuses.length - 1) {
-      setCurrentVirtueIndex(prev => prev + 1);
-    } else {
-      setShowVirtueSummary(true);
-    }
-  };
-
-  const goToPreviousVirtue = () => {
-    if (currentVirtueIndex > 0) {
-      setCurrentVirtueIndex(prev => prev - 1);
-    }
-  };
-
-  const goBackToVirtues = () => {
-    setShowVirtueSummary(false);
-  };
-
-  const completeVirtueCheckIn = async () => {
+  const completeVirtueCheckIn = async (virtueResponses) => {
     const dateString = getSelectedDateString(selectedDate);
     
     if (!canCheckInForDate(selectedDate)) {
-      return; // Don't allow editing for dates other than today/yesterday
+      return;
     }
     
     try {
       // Update local state
       setVirtueCheckIns(prev => ({
         ...prev,
-        [dateString]: tempVirtueResponses
+        [dateString]: virtueResponses
       }));
       
       // Update in Firestore
-      await dataService.updateTodayVirtues(tempVirtueResponses, dateString);
+      await dataService.updateTodayVirtues(virtueResponses, dateString);
       
-      // Habit completion tracking removed - no longer update virtue check-in habit completion
-      
-      // Reset pagination state and close modal
-      setCurrentVirtueIndex(0);
-      setTempVirtueResponses({});
-      setShowVirtueSummary(false);
+      // Close modal
       setExpandedVirtues(false);
       
     } catch (error) {
       console.error('Error completing virtue check-in:', error);
+      throw error; // Re-throw so modal can handle it
     }
   };
 
   const startVirtueCheckIn = () => {
-    // Don't open modal if we're currently in the routine view and the virtue habit is active
-    // This prevents the modal from opening when the virtue check-in is integrated in the routine
-    if (showRoutineView && activeRoutine) {
+    // Don't open modal if we're currently in an active routine and the virtue habit is active
+    if (activeRoutine) {
       const currentHabitId = activeRoutine.habits[activeRoutineIndex];
       const currentHabit = habits.find(h => h.id === currentHabitId);
       if (currentHabit?.isVirtueCheckIn) {
@@ -2686,13 +2514,7 @@ const HabitGoalTracker = () => {
       }
     }
     
-    // Always allow modal to open from dashboard - users should be able to review
-    // virtue check-in even when a routine is active
-    const dateString = getSelectedDateString(selectedDate);
-    const existingResponses = virtueCheckIns[dateString] || {};
-    setTempVirtueResponses(existingResponses);
-    setCurrentVirtueIndex(0);
-    setShowVirtueSummary(false);
+    // Open the modal
     setExpandedVirtues(true);
   };
   
@@ -2967,9 +2789,7 @@ const HabitGoalTracker = () => {
     // Persist timer state to database
     const timerData = {
       startTime: new Date(startTime).toISOString(),
-      duration: duration,
-      pausedAt: null,
-      pausedElapsed: null
+      duration: duration
     };
     
     const currentActiveTimers = activeTimers || {};
@@ -2992,9 +2812,7 @@ const HabitGoalTracker = () => {
     // Persist timer state to database
     const timerData = {
       startTime: new Date(startTime).toISOString(),
-      duration: null,
-      pausedAt: null,
-      pausedElapsed: null
+      duration: null
     };
     
     const currentActiveTimers = activeTimers || {};
@@ -3090,14 +2908,11 @@ const HabitGoalTracker = () => {
   // Enhanced timer functions for music player UI
   const getTimerDisplayTime = (habitId) => {
     const startTime = activeTimers[habitId];
-    const pausedTime = pausedTimers[habitId];
     const duration = timerDurations[habitId];
     
     let elapsed = 0;
     if (startTime) {
       elapsed = (Date.now() - startTime) / 1000; // in seconds
-    } else if (pausedTime) {
-      elapsed = pausedTime; // Use paused elapsed time
     } else {
       return null;
     }
@@ -3126,16 +2941,13 @@ const HabitGoalTracker = () => {
 
   const getTimerDisplayMode = (habitId) => {
     const startTime = activeTimers[habitId];
-    const pausedTime = pausedTimers[habitId];
     const duration = timerDurations[habitId];
     
-    if (!startTime && !pausedTime) return 'ready';
+    if (!startTime) return 'ready';
     
     let elapsed = 0;
     if (startTime) {
       elapsed = (Date.now() - startTime) / 1000; // in seconds
-    } else if (pausedTime) {
-      elapsed = pausedTime;
     }
     
     const _ = timerUpdateTrigger;
@@ -3160,16 +2972,13 @@ const HabitGoalTracker = () => {
 
   const getCircularProgress = (habitId) => {
     const startTime = activeTimers[habitId];
-    const pausedTime = pausedTimers[habitId];
     const duration = timerDurations[habitId];
     
-    if (!startTime && !pausedTime) return 0;
+    if (!startTime) return 0;
     
     let elapsed = 0;
     if (startTime) {
       elapsed = (Date.now() - startTime) / 1000; // in seconds
-    } else if (pausedTime) {
-      elapsed = pausedTime;
     }
     
     const _ = timerUpdateTrigger;
@@ -3184,7 +2993,7 @@ const HabitGoalTracker = () => {
     }
   };
 
-  // Handle tapping the circular timer for play/pause
+  // Handle tapping the circular timer for play/stop
   const handleTimerTap = (habitId) => {
     if (!activeRoutine) return;
     
@@ -3192,11 +3001,8 @@ const HabitGoalTracker = () => {
     if (!currentHabit) return;
     
     if (activeTimers[habitId]) {
-      // Timer is running, pause it
-      pauseRoutine();
-    } else if (pausedTimers[habitId] !== undefined) {
-      // Timer is paused, resume it
-      resumeRoutine();
+      // Timer is already running, do nothing
+      return;
     } else {
       // No timer, start it
       if (currentHabit.duration) {
@@ -3363,6 +3169,20 @@ const HabitGoalTracker = () => {
     const routine = routines.find(r => r.id === routineId);
     if (!routine) return;
 
+    // Check if another routine is already active
+    if (activeRoutine) {
+      // Show confirmation dialog
+      const confirmed = window.confirm(`Are you done with routine "${activeRoutine.name}"?`);
+      if (confirmed) {
+        // Finish current routine with skip
+        await finishRoutineWithSkip();
+      } else {
+        // Navigate to active routine screen
+        setCurrentView('activeRoutine');
+        return;
+      }
+    }
+
     // Find first uncompleted habit in routine
     const today = getTodayString();
     let firstIncompleteIndex = 0;
@@ -3379,25 +3199,16 @@ const HabitGoalTracker = () => {
 
     const routineStartTime = Date.now();
 
-    // Add routine to open routines and show routine view
-    setOpenRoutines(prev => new Set([...prev, routineId]));
-    setShowRoutineView(true);
-    
-    // Set as active routine if no other routine is active
-    if (!activeRoutine) {
-      setActiveRoutine(routine);
-      setActiveRoutineIndex(firstIncompleteIndex);
-      setRoutineStartTime(routineStartTime);
-      setRoutinePaused(false);
-    }
+    // Set as active routine
+    setActiveRoutine(routine);
+    setActiveRoutineIndex(firstIncompleteIndex);
+    setRoutineStartTime(routineStartTime);
 
     // Persist routine state to database
     const routineState = {
       routineId: routineId,
       startTime: new Date(routineStartTime).toISOString(),
-      currentHabitIndex: firstIncompleteIndex,
-      paused: false,
-      pausedAt: null
+      currentHabitIndex: firstIncompleteIndex
     };
     await dataService.updateActiveRoutine(routineState, today);
 
@@ -3411,6 +3222,9 @@ const HabitGoalTracker = () => {
         await startUncappedTimer(firstHabitId);
       }
     }
+
+    // Navigate to active routine screen
+    setCurrentView('activeRoutine');
   };
 
   const completeRoutineHabit = async (habitId) => {
@@ -3504,10 +3318,9 @@ const HabitGoalTracker = () => {
       });
     }
 
-    // Go to previous habit and pause (don't auto-start)
+    // Go to previous habit
     const prevIndex = activeRoutineIndex - 1;
     setActiveRoutineIndex(prevIndex);
-    // Don't set routinePaused - just go to previous habit
   };
 
   const skipCurrentHabit = () => {
@@ -3548,137 +3361,18 @@ const HabitGoalTracker = () => {
     }
   };
 
-  const pauseRoutine = async () => {
-    if (!activeRoutine) return;
-    
-    // Pause current timer and save elapsed time
-    const currentHabitId = activeRoutine.habits[activeRoutineIndex];
-    if (activeTimers[currentHabitId]) {
-      const startTime = activeTimers[currentHabitId];
-      const elapsed = (Date.now() - startTime) / 1000; // in seconds
-      
-      // Save elapsed time to paused timers
-      setPausedTimers(prev => ({
-        ...prev,
-        [currentHabitId]: elapsed
-      }));
-      
-      // Update active timers in database to mark as paused
-      const currentActiveTimers = activeTimers || {};
-      const newActiveTimers = { ...currentActiveTimers };
-      if (newActiveTimers[currentHabitId]) {
-        newActiveTimers[currentHabitId] = {
-          ...newActiveTimers[currentHabitId],
-          pausedAt: new Date().toISOString(),
-          pausedElapsed: elapsed
-        };
-      }
-      await dataService.updateActiveHabitTimers(newActiveTimers, getTodayString());
-      
-      // Remove from active timers state
-      setActiveTimers(prev => {
-        const newTimers = { ...prev };
-        delete newTimers[currentHabitId];
-        return newTimers;
-      });
-    }
-    
-    // Don't set routinePaused to true - only pause the current habit
-  };
 
-  const resumeRoutine = async () => {
-    if (!activeRoutine) return;
-    
-    // Resume current habit timer from paused state
-    const currentHabitId = activeRoutine.habits[activeRoutineIndex];
-    const pausedTime = pausedTimers[currentHabitId];
-    
-    if (pausedTime !== undefined) {
-      // Resume from paused time by setting a new start time that accounts for elapsed time
-      const newStartTime = Date.now() - (pausedTime * 1000);
-      
-      setActiveTimers(prev => ({
-        ...prev,
-        [currentHabitId]: newStartTime
-      }));
-      
-      // Update active timers in database to mark as resumed
-      const currentActiveTimers = activeTimers || {};
-      const newActiveTimers = { ...currentActiveTimers };
-      if (newActiveTimers[currentHabitId]) {
-        newActiveTimers[currentHabitId] = {
-          ...newActiveTimers[currentHabitId],
-          startTime: new Date(newStartTime).toISOString(),
-          pausedAt: null,
-          pausedElapsed: null
-        };
-      }
-      await dataService.updateActiveHabitTimers(newActiveTimers, getTodayString());
-      
-      // Remove from paused timers
-      setPausedTimers(prev => {
-        const newPaused = { ...prev };
-        delete newPaused[currentHabitId];
-        return newPaused;
-      });
-    } else {
-      // Start fresh timer if no paused time
-      const currentHabit = habits.find(h => h.id === currentHabitId);
-      if (currentHabit) {
-        if (currentHabit.duration) {
-          await startTimer(currentHabitId, currentHabit.duration);
-        } else {
-          await startUncappedTimer(currentHabitId);
-        }
-      }
-    }
-    
-    // Don't set routinePaused - only resume the current habit
-  };
 
   const stopRoutine = () => {
-    // Stop current timer
-    const currentHabitId = activeRoutine?.habits[activeRoutineIndex];
-    if (currentHabitId && activeTimers[currentHabitId]) {
-      setActiveTimers(prev => {
-        const newTimers = { ...prev };
-        delete newTimers[currentHabitId];
-        return newTimers;
-      });
-      setTimerDurations(prev => {
-        const newDurations = { ...prev };
-        delete newDurations[currentHabitId];
-        return newDurations;
-      });
-    }
-
-    // Clear routine state but keep routine view open
-    setActiveRoutine(null);
-    setActiveRoutineIndex(0);
-    setRoutineStartTime(null);
-    setRoutinePaused(false);
-    // Don't close routine view - let user decide when to close
+    // Just close the view and return to dashboard
+    // Keep the routine active so it can be resumed
+    setCurrentView('dashboard');
   };
 
   const closeRoutine = (routineId) => {
-    setOpenRoutines(prev => {
-      const newSet = new Set(prev);
-      newSet.delete(routineId);
-      
-      // If no more open routines, close the routine view
-      if (newSet.size === 0) {
-        setShowRoutineView(false);
-      }
-      
-      return newSet;
-    });
-    
-    // If this was the active routine, clear it
+    // If this was the active routine, just close the view but keep routine active
     if (activeRoutine && activeRoutine.id === routineId) {
-      setActiveRoutine(null);
-      setActiveRoutineIndex(0);
-      setRoutineStartTime(null);
-      setRoutinePaused(false);
+      setCurrentView('dashboard'); // Return to homepage but keep routine active
     }
   };
 
@@ -3691,22 +3385,27 @@ const HabitGoalTracker = () => {
     const todayHabitCompletions = habitCompletions[today] || {};
     const habitTimes = {};
     let totalDuration = 0;
+    let lastHabitEndTime = null;
     
     activeRoutine.habits.forEach(habitId => {
       const habitCompletion = todayHabitCompletions[habitId];
       if (habitCompletion?.duration) {
         habitTimes[habitId] = habitCompletion.duration;
         totalDuration += habitCompletion.duration;
+        // Track the last completed habit's end time
+        if (habitCompletion.endTime) {
+          lastHabitEndTime = habitCompletion.endTime;
+        }
       }
     });
     
     // Create routine completion object
     const routineCompletion = {
       completed: true,
-      completedAt: new Date().toISOString(),
+      completedAt: lastHabitEndTime || new Date().toISOString(),
       totalDuration: Math.round(totalDuration * 10) / 10,
       startTime: routineStartTime ? new Date(routineStartTime).toISOString() : null,
-      endTime: new Date().toISOString(),
+      endTime: lastHabitEndTime || new Date().toISOString(),
       habitTimes: habitTimes
     };
     
@@ -3722,12 +3421,89 @@ const HabitGoalTracker = () => {
     // Update database
     await dataService.updateTodayRoutines({ [activeRoutine.id]: routineCompletion }, today);
     
-    // Clear active routine state but keep routine view open
+    // Clear active routine state and return to homepage
     setActiveRoutine(null);
     setActiveRoutineIndex(0);
     setRoutineStartTime(null);
-    setRoutinePaused(false);
-    // Don't close routine view - let user decide when to close
+    setCurrentView('dashboard'); // Return to homepage
+    
+    // Clear active routine from database
+    await dataService.updateActiveRoutine(null, today);
+  };
+
+  const finishRoutineWithSkip = async () => {
+    if (!activeRoutine) return;
+    
+    const today = getTodayString();
+    
+    // Skip the current active habit
+    const currentHabitId = activeRoutine.habits[activeRoutineIndex];
+    if (currentHabitId) {
+      const skipCompletion = {
+        completed: false,
+        completedAt: null,
+        duration: null,
+        startTime: null,
+        endTime: new Date().toISOString(),
+        notes: "Skipped"
+      };
+      
+      // Update habit completion
+      setHabitCompletions(prev => ({
+        ...prev,
+        [today]: {
+          ...prev[today],
+          [currentHabitId]: skipCompletion
+        }
+      }));
+      
+      await dataService.updateTodayHabits({ [currentHabitId]: skipCompletion }, today);
+    }
+    
+    // Calculate total duration from all completed habits in the routine
+    const todayHabitCompletions = habitCompletions[today] || {};
+    const habitTimes = {};
+    let totalDuration = 0;
+    let lastHabitEndTime = null;
+    
+    activeRoutine.habits.forEach(habitId => {
+      const habitCompletion = todayHabitCompletions[habitId];
+      if (habitCompletion?.duration) {
+        habitTimes[habitId] = habitCompletion.duration;
+        totalDuration += habitCompletion.duration;
+        // Track the last completed habit's end time
+        if (habitCompletion.endTime) {
+          lastHabitEndTime = habitCompletion.endTime;
+        }
+      }
+    });
+    
+    // Create routine completion object
+    const routineCompletion = {
+      completed: true,
+      completedAt: lastHabitEndTime || new Date().toISOString(),
+      totalDuration: Math.round(totalDuration * 10) / 10,
+      startTime: routineStartTime ? new Date(routineStartTime).toISOString() : null,
+      endTime: lastHabitEndTime || new Date().toISOString(),
+      habitTimes: habitTimes
+    };
+    
+    // Update routine completions state
+    setRoutineCompletions(prev => ({
+      ...prev,
+      [today]: {
+        ...prev[today],
+        [activeRoutine.id]: routineCompletion
+      }
+    }));
+    
+    // Update database
+    await dataService.updateTodayRoutines({ [activeRoutine.id]: routineCompletion }, today);
+    
+    // Clear active routine state
+    setActiveRoutine(null);
+    setActiveRoutineIndex(0);
+    setRoutineStartTime(null);
     
     // Clear active routine from database
     await dataService.updateActiveRoutine(null, today);
@@ -3994,48 +3770,6 @@ const HabitGoalTracker = () => {
     // Update today's todos in daily data
     const todayTodos = newTodos.filter(t => t.addedAt === getTodayString());
     await dataService.updateTodayTodos(todayTodos, getTodayString());
-  };
-  
-  // Export data to JSON file
-  const exportData = () => {
-    const data = dataService.exportUserData();
-    if (!data) return;
-    
-    const jsonString = JSON.stringify(data, null, 2);
-    const blob = new Blob([jsonString], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `growth-tracker-backup-${currentUser?.name || 'user'}-${getDateStringLocal(new Date())}.json`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-  };
-  
-  // Import data from JSON file
-  const importData = (event) => {
-    const file = event.target.files[0];
-    if (!file) return;
-    
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      try {
-        const data = JSON.parse(e.target.result);
-        
-        if (dataService.importUserData(data)) {
-          loadUserData(); // Reload data from service
-          alert('Data imported successfully!');
-          setShowDataMenu(false);
-        } else {
-          alert('Error importing data. Please check the file format.');
-        }
-      } catch (error) {
-        alert('Error importing data. Please check the file format.');
-        console.error('Import error:', error);
-      }
-    };
-    reader.readAsText(file);
   };
   
   // Dashboard View
@@ -4493,17 +4227,17 @@ const HabitGoalTracker = () => {
                       return null;
                     })()}
                     
-                    {/* Start Routine Button */}
-                    {routine.habits.length > 0 && !stats.completed && getSelectedDateString(selectedDate) === getSelectedDateString(new Date()) && (
-                      <button
-                        onClick={() => startRoutine(routine.id)}
-                        disabled={activeRoutine !== null}
-                        className="mt-4 w-full flex items-center justify-center gap-2 bg-[#4b5320]/100 text-white py-3 rounded-lg hover:bg-[#4b5320] font-bold uppercase text-sm tracking-wider shadow-lg transition-all hover:shadow-xl hover:scale-[1.02] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
-                      >
-                        <Play size={20} strokeWidth={2.5} />
-                        {activeRoutine ? 'Routine In Progress' : 'Start Routine'}
-                      </button>
-                    )}
+                      {/* Start Routine Button */}
+                      {routine.habits.length > 0 && !stats.completed && getSelectedDateString(selectedDate) === getSelectedDateString(new Date()) && (
+                        <button
+                          onClick={() => startRoutine(routine.id)}
+                          disabled={activeRoutine !== null && activeRoutine.id !== routine.id} 
+                          className="mt-4 w-full flex items-center justify-center gap-2 bg-[#4b5320]/100 text-white py-3 rounded-lg hover:bg-[#4b5320] font-bold uppercase text-sm tracking-wider shadow-lg transition-all hover:shadow-xl hover:scale-[1.02] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
+                        >
+                          <Play size={20} strokeWidth={2.5} />
+                          {activeRoutine?.id === routine.id ? 'Resume Routine' : 'Start Routine'} 
+                        </button>
+                      )}
                   </div>
                 )}
               </div>
@@ -4942,202 +4676,30 @@ const HabitGoalTracker = () => {
               <div className="mt-3">
                 <button
                   onClick={() => startRoutine(routine.id)}
-                  disabled={activeRoutine !== null}
+                  disabled={activeRoutine !== null && activeRoutine.id !== routine.id}
                   className="w-full flex items-center justify-center gap-2 bg-[#4b5320]/100 text-white py-3 rounded-lg hover:bg-[#4b5320] font-bold uppercase text-sm tracking-wider shadow-lg transition-all hover:shadow-xl hover:scale-[1.02] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
                 >
                   <Play size={20} strokeWidth={2.5} />
-                  {activeRoutine ? 'Routine In Progress' : 'Start Routine'}
+                  {activeRoutine?.id === routine.id ? 'Resume Routine' : 'Start Routine'} 
                 </button>
               </div>
             )}
           </div>
         ))}
         
-        {/* Virtue Check-in Modal - Fixed position overlay */}
+        {/* Virtue Check-in Modal */}
         {expandedVirtues && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-xl shadow-2xl border-2 border-[#1a252f]/40 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-              <div className="px-6 py-4 border-b border-gray-200 sticky top-0 bg-white">
-                <div className="flex items-center justify-between">
-                  <h4 className="font-semibold text-[#333333] text-xl">Daily Virtue Check-in</h4>
-                  <button
-                    onClick={() => {
-                      setExpandedVirtues(false);
-                      setCurrentVirtueIndex(0);
-                      setTempVirtueResponses({});
-                      setShowVirtueSummary(false);
-                    }}
-                    className="text-gray-500 hover:text-gray-700"
-                  >
-                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
-                </div>
-              </div>
-              
-              {!showVirtueSummary ? (
-                /* Virtue Page View */
-                <div className="px-6 py-8">
-                  {(() => {
-                    const currentVirtue = weeklyFocuses[currentVirtueIndex];
-                    const currentResponse = tempVirtueResponses[currentVirtue.virtue];
-                    const currentWeeklyFocus = getWeeklyFocus();
-                    const isCurrentWeekVirtue = currentVirtue.virtue === currentWeeklyFocus.virtue;
-                    const canEdit = canCheckInForDate(selectedDate);
-                    
-                    return (
-                      <div className="text-center">
-                        {/* Progress Indicator */}
-                        <div className="mb-6">
-                          <div className="flex items-center justify-center mb-2">
-                            <span className="text-sm text-gray-600">
-                              {currentVirtueIndex + 1} of {weeklyFocuses.length}
-                            </span>
-                          </div>
-                          <div className="w-full bg-gray-200 rounded-full h-2">
-                            <div 
-                              className="bg-[#1a252f] h-2 rounded-full transition-all duration-300"
-                              style={{ width: `${((currentVirtueIndex + 1) / weeklyFocuses.length) * 100}%` }}
-                            ></div>
-                          </div>
-                        </div>
-
-                        {/* Virtue Name */}
-                        <h3 className="text-3xl font-bold text-[#333333] mb-4">
-                          {currentVirtue.virtue}
-                          {isCurrentWeekVirtue && (
-                            <span className="ml-3 text-lg text-[#1a252f] font-normal">(This Week's Focus)</span>
-                          )}
-                        </h3>
-
-                        {/* Focus Statement */}
-                        <p className="text-lg text-[#1a252f] mb-6 font-medium">
-                          {currentVirtue.focus}
-                        </p>
-
-                        {/* Detailed Description */}
-                        <div className="text-left mb-8">
-                          <p className="text-gray-700 leading-relaxed">
-                            {currentVirtue.description}
-                          </p>
-                        </div>
-
-                        {/* Yes/No Buttons */}
-                        {canEdit ? (
-                          <div className="flex gap-4 justify-center mb-8">
-                            <button
-                              onClick={() => selectVirtueResponse(currentVirtue.virtue, true)}
-                              className={`px-8 py-4 rounded-xl text-lg font-semibold transition-all duration-200 ${
-                                currentResponse === true
-                                  ? 'bg-[#4b5320] text-white shadow-lg transform scale-105'
-                                  : 'bg-[#4b5320]/20 text-[#4b5320] hover:bg-[#4b5320]/30'
-                              }`}
-                            >
-                              ✓ Yes
-                            </button>
-                            <button
-                              onClick={() => selectVirtueResponse(currentVirtue.virtue, false)}
-                              className={`px-8 py-4 rounded-xl text-lg font-semibold transition-all duration-200 ${
-                                currentResponse === false
-                                  ? 'bg-red-600 text-white shadow-lg transform scale-105'
-                                  : 'bg-red-100 text-red-700 hover:bg-red-200'
-                              }`}
-                            >
-                              ✗ No
-                            </button>
-                          </div>
-                        ) : (
-                          <div className="mb-8">
-                            <p className="text-gray-500 italic">
-                              You can only check in for today and yesterday
-                            </p>
-                          </div>
-                        )}
-
-                        {/* Navigation */}
-                        <div className="flex justify-center items-center">
-                          <button
-                            onClick={goToPreviousVirtue}
-                            disabled={currentVirtueIndex === 0}
-                            className="px-6 py-3 rounded-lg bg-gray-100 text-gray-700 font-medium hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                          >
-                            ← Previous
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })()}
-                </div>
-              ) : (
-                /* Summary Page View */
-                <div className="px-6 py-8">
-                  <div className="text-center mb-8">
-                    <h3 className="text-2xl font-bold text-[#333333] mb-4">Your Virtue Check-in Summary</h3>
-                    <div className="text-lg text-gray-600">
-                      {Object.values(tempVirtueResponses).filter(Boolean).length} of {weeklyFocuses.length} virtues achieved today
-                    </div>
-                  </div>
-
-                  <div className="space-y-3 mb-8">
-                    {weeklyFocuses.map((virtue, index) => {
-                      const response = tempVirtueResponses[virtue.virtue];
-                      const currentWeeklyFocus = getWeeklyFocus();
-                      const isCurrentWeekVirtue = virtue.virtue === currentWeeklyFocus.virtue;
-                      
-                      return (
-                        <div 
-                          key={index}
-                          className={`flex items-center gap-4 p-4 rounded-lg border-2 ${
-                            response === true 
-                              ? 'bg-[#4b5320]/10 border-[#4b5320]/30' 
-                              : response === false 
-                                ? 'bg-red-50 border-red-200' 
-                                : 'bg-gray-50 border-gray-200'
-                          } ${isCurrentWeekVirtue ? 'ring-2 ring-[#1a252f]/40' : ''}`}
-                        >
-                          <div className="text-2xl">
-                            {response === true ? '✓' : response === false ? '✗' : '○'}
-                          </div>
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2">
-                              <span className={`font-semibold ${
-                                response === true ? 'text-[#4b5320]' : response === false ? 'text-red-800' : 'text-gray-600'
-                              }`}>
-                                {virtue.virtue}
-                              </span>
-                              {isCurrentWeekVirtue && (
-                                <span className="text-xs text-[#1a252f] bg-[#1a252f]/20 px-2 py-1 rounded">This Week's Focus</span>
-                              )}
-                            </div>
-                            <div className="text-sm text-gray-600">
-                              {virtue.focus}
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-
-                  <div className="flex justify-between items-center">
-                    <button
-                      onClick={goBackToVirtues}
-                      className="px-6 py-3 rounded-lg bg-gray-100 text-gray-700 font-medium hover:bg-gray-200 transition-colors"
-                    >
-                      ← Go Back
-                    </button>
-                    
-                    <button
-                      onClick={completeVirtueCheckIn}
-                      className="px-8 py-3 rounded-lg bg-[#1a252f] text-white font-medium hover:bg-[#1a252f] transition-colors"
-                    >
-                      Complete Check-in
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
+          <VirtueCheckInModal
+            isOpen={expandedVirtues}
+            onClose={() => setExpandedVirtues(false)}
+            weeklyFocuses={weeklyFocuses}
+            selectedDate={selectedDate}
+            existingResponses={virtueCheckIns[getSelectedDateString(selectedDate)] || {}}
+            canCheckIn={canCheckInForDate(selectedDate)}
+            onComplete={completeVirtueCheckIn}
+            getDateString={getSelectedDateString}
+            getWeeklyFocus={getWeeklyFocus}
+          />
         )}
         
         {/* Single Habits Section */}
@@ -6072,11 +5634,16 @@ const HabitGoalTracker = () => {
     
     // Start virtue check-in
     const startVirtueCheckIn = () => {
-      const dateString = getSelectedDateString(selectedDate);
-      const existingResponses = virtueCheckIns[dateString] || {};
-      setTempVirtueResponses(existingResponses);
-      setCurrentVirtueIndex(0);
-      setShowVirtueSummary(false);
+      // Don't open modal if we're currently in an active routine and the virtue habit is active
+      if (activeRoutine) {
+        const currentHabitId = activeRoutine.habits[activeRoutineIndex];
+        const currentHabit = habits.find(h => h.id === currentHabitId);
+        if (currentHabit?.isVirtueCheckIn) {
+          return;
+        }
+      }
+      
+      // Open the modal
       setExpandedVirtues(true);
     };
     
@@ -6415,7 +5982,8 @@ const HabitGoalTracker = () => {
 
   // Navigation
   const Navigation = () => {
-    if (showRoutineView) return null; // Hide navigation when in routine view
+    // Only hide navigation when actively viewing the routine screen
+    if (currentView === 'activeRoutine') return null;
     
     return (
       <div className="fixed bottom-0 left-0 right-0 backdrop-blur-sm bg-white/95 shadow-lg border-t border-stone-200 z-50 pb-safe">
@@ -6511,9 +6079,31 @@ const HabitGoalTracker = () => {
       <div className="max-w-md mx-auto">
         
         {/* Main Content - Add top padding to account for fixed header */}
-        <div className={`pt-4 ${showRoutineView ? 'pb-0' : 'pb-20'}`}>
-          {showRoutineView ? (
-            <RoutineView />
+        <div className={`pt-4 ${activeRoutine ? 'pb-0' : 'pb-20'}`}>
+        {activeRoutine && currentView === 'activeRoutine' ? (
+            <ActiveRoutineScreen
+              activeRoutine={activeRoutine}
+              activeRoutineIndex={activeRoutineIndex}
+              routineStartTime={routineStartTime}
+              habits={habits}
+              habitCompletions={habitCompletions}
+              activeTimers={activeTimers}
+              timerDurations={timerDurations}
+              onStopRoutine={stopRoutine}
+              onCompleteHabit={completeRoutineHabit}
+              onSkipHabit={skipCurrentHabit}
+              onGoToPreviousHabit={goToPreviousHabit}
+              onGoToNextHabit={skipCurrentHabit}
+              onToggleTimer={handleTimerTap}
+              getTodayString={getTodayString}
+              calculateRoutineDuration={calculateRoutineDuration}
+              formatMinutesToHours={formatMinutesToHours}
+              getCircularProgress={getCircularProgress}
+              getTimerColor={getTimerColor}
+              getTimerDisplayTime={getTimerDisplayTime}
+              getTimerDisplayMode={getTimerDisplayMode}
+              handleTimerTap={handleTimerTap}
+            />
           ) : (
             <div className="p-4">
               {currentView === 'dashboard' && <DashboardView selectedDate={selectedDate} setSelectedDate={setSelectedDate} />}
@@ -6609,183 +6199,17 @@ const HabitGoalTracker = () => {
 
         {/* Virtue Check-in Modal */}
         {expandedVirtues && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-              <div className="p-6">
-                <div className="flex items-center justify-between mb-6">
-                  <h2 className="text-2xl font-bold text-[#333333]">Daily Virtue Check-in</h2>
-                  <button
-                    onClick={() => {
-                      setExpandedVirtues(false);
-                      setCurrentVirtueIndex(0);
-                      setTempVirtueResponses({});
-                      setShowVirtueSummary(false);
-                    }}
-                    className="p-2 hover:bg-stone-100 rounded-lg transition-colors"
-                  >
-                    <X size={24} strokeWidth={2.5} className="text-[#333333]" />
-                  </button>
-                </div>
-                
-                {!showVirtueSummary ? (
-                  // Virtue Question Display
-                  <div className="text-center">
-                    <h3 className="text-2xl font-bold text-[#333333] mb-2">
-                      {weeklyFocuses[currentVirtueIndex]?.virtue}
-                    </h3>
-                    <p className="text-lg text-[#1a252f] mb-6 font-medium">
-                      {weeklyFocuses[currentVirtueIndex]?.focus}
-                    </p>
-                    <div className="text-left mb-8">
-                      <p className="text-gray-700 leading-relaxed">
-                        {weeklyFocuses[currentVirtueIndex]?.description}
-                      </p>
-                    </div>
-                    
-                    {/* Yes/No Buttons */}
-                    <div className="flex gap-4 justify-center mb-8">
-                      <button
-                        onClick={() => selectVirtueResponse(weeklyFocuses[currentVirtueIndex]?.virtue, true)}
-                        className={`px-8 py-4 rounded-xl text-lg font-semibold transition-all duration-200 ${
-                          tempVirtueResponses[weeklyFocuses[currentVirtueIndex]?.virtue] === true
-                            ? 'bg-[#4b5320] text-white shadow-lg transform scale-105'
-                            : 'bg-[#4b5320]/20 text-[#4b5320] hover:bg-[#4b5320]/30'
-                        }`}
-                      >
-                        ✓ Yes
-                      </button>
-                      <button
-                        onClick={() => selectVirtueResponse(weeklyFocuses[currentVirtueIndex]?.virtue, false)}
-                        className={`px-8 py-4 rounded-xl text-lg font-semibold transition-all duration-200 ${
-                          tempVirtueResponses[weeklyFocuses[currentVirtueIndex]?.virtue] === false
-                            ? 'bg-red-600 text-white shadow-lg transform scale-105'
-                            : 'bg-red-100 text-red-700 hover:bg-red-200'
-                        }`}
-                      >
-                        ✗ No
-                      </button>
-                    </div>
-                    
-                    {/* Pagination Controls */}
-                    <div className="flex items-center justify-center gap-4 mb-4">
-                      <button
-                        onClick={goToPreviousVirtue}
-                        disabled={currentVirtueIndex === 0}
-                        className="px-6 py-3 rounded-lg bg-gray-100 text-gray-700 font-medium hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                      >
-                        ← Previous
-                      </button>
-                      <span className="text-sm text-gray-600 font-mono">
-                        {currentVirtueIndex + 1} / {weeklyFocuses.length}
-                      </span>
-                      <button
-                        onClick={goToNextVirtue}
-                        disabled={currentVirtueIndex >= weeklyFocuses.length - 1}
-                        className="px-6 py-3 rounded-lg bg-gray-100 text-gray-700 font-medium hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                      >
-                        Next →
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  // Summary Page Display
-                  <div className="text-center">
-                    <h3 className="text-2xl font-bold text-[#333333] mb-4">Your Virtue Check-in Summary</h3>
-                    <div className="text-lg text-gray-600 mb-8">
-                      {Object.values(tempVirtueResponses).filter(Boolean).length} of {weeklyFocuses.length} virtues achieved today
-                    </div>
-
-                    <div className="space-y-3 mb-8 max-h-64 overflow-y-auto">
-                      {weeklyFocuses.map((virtue, index) => {
-                        const response = tempVirtueResponses[virtue.virtue];
-                        const currentWeeklyFocus = getWeeklyFocus();
-                        const isCurrentWeekVirtue = virtue.virtue === currentWeeklyFocus.virtue;
-                        
-                        return (
-                          <div 
-                            key={virtue.virtue}
-                            className={`flex items-center gap-4 p-3 rounded-lg border-2 ${
-                              response === true 
-                                ? 'bg-[#4b5320]/10 border-[#4b5320]/30' 
-                                : response === false 
-                                  ? 'bg-red-50 border-red-200' 
-                                  : 'bg-gray-50 border-gray-200'
-                            } ${isCurrentWeekVirtue ? 'ring-2 ring-[#1a252f]/40' : ''}`}
-                          >
-                            <div className="text-xl">
-                              {response === true ? '✓' : response === false ? '✗' : '○'}
-                            </div>
-                            <div className="flex-1 text-left">
-                              <div className="flex items-center gap-2">
-                                <span className={`font-semibold ${
-                                  response === true ? 'text-[#4b5320]' : response === false ? 'text-red-800' : 'text-gray-600'
-                                }`}>
-                                  {virtue.virtue}
-                                </span>
-                                {isCurrentWeekVirtue && (
-                                  <span className="text-xs text-[#1a252f] bg-[#1a252f]/20 px-2 py-1 rounded">This Week's Focus</span>
-                                )}
-                              </div>
-                              <div className="text-sm text-gray-600">
-                                {virtue.focus}
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-
-                    {/* Daily Challenge Section */}
-                    {(() => {
-                      const dateString = getSelectedDateString(selectedDate);
-                      const dailyChallenge = dailyChallenges[dateString];
-                      
-                      if (dailyChallenge && dailyChallenge.completed) {
-                        return (
-                          <div className="mt-6 p-4 bg-[#1a252f]/10 border-2 border-[#1a252f]/30 rounded-lg">
-                            <div className="flex items-center gap-2 mb-2">
-                              <span className="text-[#1a252f] text-xl">✓</span>
-                              <p className="text-sm font-bold text-[#1a252f]">Daily Challenge Completed!</p>
-                            </div>
-                            <p className="text-sm text-[#1a252f] mb-1">{dailyChallenge.challenge}</p>
-                            <div className="flex items-center gap-2 mt-2">
-                              <span className={`inline-block px-2 py-1 text-xs font-medium rounded-full ${
-                                dailyChallenge.difficulty === 'easy' ? 'bg-[#4b5320]/20 text-[#4b5320]' :
-                                dailyChallenge.difficulty === 'medium' ? 'bg-yellow-100 text-yellow-800' :
-                                'bg-red-100 text-red-800'
-                              }`}>
-                                {dailyChallenge.difficulty}
-                              </span>
-                              <p className="text-xs text-[#1a252f]">
-                                Completed at {new Date(dailyChallenge.completedAt).toLocaleTimeString()}
-                              </p>
-                            </div>
-                          </div>
-                        );
-                      }
-                      return null;
-                    })()}
-
-                    <div className="flex justify-between items-center mt-6">
-                      <button
-                        onClick={goBackToVirtues}
-                        className="px-6 py-3 rounded-lg bg-gray-100 text-gray-700 font-medium hover:bg-gray-200 transition-colors"
-                      >
-                        ← Go Back
-                      </button>
-                      
-                      <button
-                        onClick={completeVirtueCheckIn}
-                        className="px-8 py-3 rounded-lg bg-[#1a252f] text-white font-medium hover:bg-[#1a252f] transition-colors"
-                      >
-                        Complete Check-in
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
+          <VirtueCheckInModal
+            isOpen={expandedVirtues}
+            onClose={() => setExpandedVirtues(false)}
+            weeklyFocuses={weeklyFocuses}
+            selectedDate={selectedDate}
+            existingResponses={virtueCheckIns[getSelectedDateString(selectedDate)] || {}}
+            canCheckIn={canCheckInForDate(selectedDate)}
+            onComplete={completeVirtueCheckIn}
+            getDateString={getSelectedDateString}
+            getWeeklyFocus={getWeeklyFocus}
+          />
         )}
 
         {/* Challenge Modal */}
