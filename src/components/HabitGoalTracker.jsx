@@ -3168,17 +3168,23 @@ const HabitGoalTracker = () => {
   const startRoutine = async (routineId) => {
     const routine = routines.find(r => r.id === routineId);
     if (!routine) return;
-
-    // Check if another routine is already active
+  
+    // Check if there's an active routine
     if (activeRoutine) {
-      // Show confirmation dialog
+      // If clicking the same routine that's already active, just resume it
+      if (activeRoutine.id === routineId) {
+        setCurrentView('activeRoutine'); // Show music player
+        return;
+      }
+      
+      // Different routine - show confirmation dialog
       const confirmed = window.confirm(`Are you done with routine "${activeRoutine.name}"?`);
       if (confirmed) {
         // Finish current routine with skip
         await finishRoutineWithSkip();
       } else {
-        // Navigate to active routine screen
-        setCurrentView('activeRoutine');
+        // User wants to continue with current routine
+        setCurrentView('activeRoutine'); // Go back to the active routine
         return;
       }
     }
