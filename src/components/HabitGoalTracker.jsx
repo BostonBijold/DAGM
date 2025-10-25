@@ -314,7 +314,7 @@ const HabitGoalTracker = () => {
   }, [routines, habitCompletions]);
 
   // Restore active timers and routine state from database
-  const restoreActiveTimers = async (todayString) => {
+  const restoreActiveTimers = async (todayString, routinesData = null) => {
     try {
       const activeHabitTimers = await dataService.getActiveHabitTimers(todayString);
       const activeRoutineState = await dataService.getActiveRoutine(todayString);
@@ -340,7 +340,8 @@ const HabitGoalTracker = () => {
       
       // Restore active routine
       if (activeRoutineState && activeRoutineState.routineId) {
-        const routine = routines.find(r => r.id === activeRoutineState.routineId);
+        const routinesToSearch = routinesData || routines;
+        const routine = routinesToSearch.find(r => r.id === activeRoutineState.routineId);
         if (routine) {
           // Check if routine is from previous day
           if (isRoutineFromPreviousDay(activeRoutineState.startTime)) {
@@ -444,7 +445,7 @@ const HabitGoalTracker = () => {
       setTodos([...validatedPersistentTodos, ...validatedTodayTodos]);
       
       // Restore active timers and routine state
-      await restoreActiveTimers(today);
+      await restoreActiveTimers(today, validatedRoutines);
       
       console.log('Today\'s data initialized for', today);
     } catch (error) {
@@ -858,7 +859,6 @@ const HabitGoalTracker = () => {
                 onChange={(e) => setHabitName(e.target.value)}
                 placeholder="Drink creatine"
                 className="w-full px-3 py-2 border-2 border-stone-300 rounded-lg focus:outline-none focus:border-[#333333]"
-                autoFocus
               />
             </div>
             
@@ -1397,7 +1397,6 @@ const HabitGoalTracker = () => {
                         onChange={(e) => setNewHabitName(e.target.value)}
                         placeholder="Morning meditation"
                         className="w-full px-3 py-2 border-2 border-stone-300 rounded-lg focus:outline-none focus:border-[#333333]"
-                        autoFocus
                       />
                     </div>
                     
@@ -1611,7 +1610,6 @@ const HabitGoalTracker = () => {
               value={editName}
               onChange={(e) => setEditName(e.target.value)}
               className="w-full px-2 py-1 border border-stone-300 rounded text-sm focus:outline-none focus:border-[#333333]"
-              autoFocus
             />
           </div>
           
@@ -1811,7 +1809,6 @@ const HabitGoalTracker = () => {
                 onChange={(e) => setHabitName(e.target.value)}
                 placeholder="Morning meditation"
                 className="w-full px-3 py-2 border-2 border-stone-300 rounded-lg focus:outline-none focus:border-[#333333]"
-                autoFocus
               />
             </div>
             <div>
@@ -2320,7 +2317,28 @@ const HabitGoalTracker = () => {
   // Get weekly focus
   const getWeeklyFocus = () => {
     const now = new Date();
-    const weekNumber = Math.floor((now - new Date(now.getFullYear(), 0, 1)) / (7 * 24 * 60 * 60 * 1000));
+    
+    // Get the start of this year in local timezone
+    const yearStart = new Date(now.getFullYear(), 0, 1);
+    yearStart.setHours(0, 0, 0, 0);
+    
+    // Find the first Sunday of the year (or the year start if it's already Sunday)
+    const firstSunday = new Date(yearStart);
+    const dayOfWeek = firstSunday.getDay(); // 0 = Sunday, 1 = Monday, etc.
+    if (dayOfWeek !== 0) {
+      // Move forward to the next Sunday
+      firstSunday.setDate(firstSunday.getDate() + (7 - dayOfWeek));
+    }
+    
+    // If we're before the first Sunday, we're in "week 0" (the partial week at year start)
+    if (now < firstSunday) {
+      return weeklyFocuses[0];
+    }
+    
+    // Calculate number of complete weeks since the first Sunday
+    const daysSinceFirstSunday = Math.floor((now - firstSunday) / (24 * 60 * 60 * 1000));
+    const weekNumber = Math.floor(daysSinceFirstSunday / 7);
+    
     return weeklyFocuses[weekNumber % weeklyFocuses.length];
   };
 
@@ -3889,6 +3907,31 @@ const HabitGoalTracker = () => {
     
     return (
       <div className="space-y-4">
+        
+        {/* Active Routine Indicator */}
+        {activeRoutine && (
+          <div className="bg-[#1a252f] text-white p-4 rounded-xl shadow-md">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-3 h-3 bg-green-400 rounded-full animate-pulse"></div>
+                <div>
+                  <h3 className="font-bold text-white text-lg uppercase tracking-wide">
+                    {activeRoutine.name} Running
+                  </h3>
+                  <p className="text-sm text-white/80">
+                    Habit {activeRoutineIndex + 1} of {activeRoutine.habits.length}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setCurrentView('activeRoutine')}
+                className="bg-white text-[#1a252f] px-4 py-2 rounded-lg font-bold text-sm uppercase tracking-wide hover:bg-gray-100 transition-colors"
+              >
+                Resume
+              </button>
+            </div>
+          </div>
+        )}
         
         {/* Weekly Focus */}
         <div className="bg-white p-5 rounded-xl shadow-md border-2 border-[#333333]">
@@ -5886,6 +5929,31 @@ const HabitGoalTracker = () => {
     
     return (
       <div className="space-y-4">
+        {/* Active Routine Indicator */}
+        {activeRoutine && (
+          <div className="bg-[#1a252f] text-white p-4 rounded-xl shadow-md">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-3 h-3 bg-green-400 rounded-full animate-pulse"></div>
+                <div>
+                  <h3 className="font-bold text-white text-lg uppercase tracking-wide">
+                    {activeRoutine.name} Running
+                  </h3>
+                  <p className="text-sm text-white/80">
+                    Habit {activeRoutineIndex + 1} of {activeRoutine.habits.length}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setCurrentView('activeRoutine')}
+                className="bg-white text-[#1a252f] px-4 py-2 rounded-lg font-bold text-sm uppercase tracking-wide hover:bg-gray-100 transition-colors"
+              >
+                Resume
+              </button>
+            </div>
+          </div>
+        )}
+        
         {/* Header */}
         <div className="flex items-center justify-between">
           <h2 className="text-2xl font-bold text-[#333333] uppercase tracking-wide">Daily Virtue Check-in</h2>
@@ -6086,7 +6154,7 @@ const HabitGoalTracker = () => {
         
         {/* Main Content - Add top padding to account for fixed header */}
         <div className={`pt-4 ${activeRoutine ? 'pb-0' : 'pb-20'}`}>
-        {activeRoutine && currentView === 'activeRoutine' ? (
+        {currentView === 'activeRoutine' ? (
             <ActiveRoutineScreen
               activeRoutine={activeRoutine}
               activeRoutineIndex={activeRoutineIndex}
@@ -6171,12 +6239,14 @@ const HabitGoalTracker = () => {
 
         {showAddRoutineModal && (
           <AddRoutineModal 
+            key="add-routine-modal"
             onClose={() => setShowAddRoutineModal(false)} 
           />
         )}
 
         {showAddSingleHabitModal && (
           <AddSingleHabitModal 
+            key="add-single-habit-modal"
             onClose={() => setShowAddSingleHabitModal(false)} 
           />
         )}
