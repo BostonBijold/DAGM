@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Check, Circle, Plus, X, ChevronRight, Home, Target, Calendar, CheckSquare, Edit2, Trash2, Download, Upload, TrendingUp, ChevronLeft, User, Play, SkipBack, SkipForward, CheckCircle, GripVertical, AlertTriangle, RefreshCw, CheckCircle2 } from 'lucide-react';
 import dataService from '../services/dataService';
 import authService from '../services/authService';
@@ -37,6 +37,7 @@ const HabitGoalTracker = () => {
   const [activeTimers, setActiveTimers] = useState({});
   const [timerDurations, setTimerDurations] = useState({});
   const [showHistory, setShowHistory] = useState(false);
+  const [viewMode, setViewMode] = useState('day'); // For history view mode persistence
   const [timerUpdateTrigger, setTimerUpdateTrigger] = useState(0);
   const [showUserManager, setShowUserManager] = useState(false);
   const [userSettings, setUserSettings] = useState(null);
@@ -4287,6 +4288,21 @@ const HabitGoalTracker = () => {
                           {activeRoutine?.id === routine.id ? 'Resume Routine' : 'Start Routine'} 
                         </button>
                       )}
+                      {/* End Routine Button - ADD THIS */}
+                      {activeRoutine?.id === routine.id && (
+                        <button
+                          onClick={async () => {
+                            const confirmed = window.confirm(`Are you sure you want to end the routine "${routine.name}"? All progress will be saved.`);
+                            if (confirmed) {
+                              await finishRoutineWithSkip();
+                            }
+                          }}
+                          className="mt-2 w-full flex items-center justify-center gap-2 bg-gray-100 text-black py-3 rounded-lg hover:bg-gray-200 font-bold uppercase text-sm tracking-wider shadow-lg transition-all hover:shadow-xl hover:scale-[1.02]"
+                        >
+                          <X size={20} strokeWidth={2.5} />
+                          End Routine
+                        </button>
+                      )}
                   </div>
                 )}
               </div>
@@ -4535,7 +4551,11 @@ const HabitGoalTracker = () => {
     const [selectedRoutine, setSelectedRoutine] = useState(null);
     
     if (showHistory) {
-      return <HistoryView onClose={() => setShowHistory(false)} />;
+      return <HistoryView 
+        onClose={() => setShowHistory(false)} 
+        viewMode={viewMode}
+        setViewMode={setViewMode}
+      />;
     }
     
     const singleHabits = habits.filter(h => h.routineId === null);
@@ -4980,9 +5000,8 @@ const HabitGoalTracker = () => {
   };
   
   // History View
-  const HistoryView = ({ onClose }) => {
+  const HistoryView = ({ onClose, viewMode, setViewMode }) => {
     const [selectedDate, setSelectedDate] = useState(new Date());
-    const [viewMode, setViewMode] = useState('day'); // 'day', 'week', 'month', 'year'
     
     // Navigate dates based on view mode
     const changeDate = (increment) => {
@@ -5013,7 +5032,7 @@ const HabitGoalTracker = () => {
       return getDateStringLocal(date);
     };
     
-    // Get habits for a specific date
+    // FIXED: Get habits for a specific date - now correctly accesses .completed property
     const getHabitsForDate = (date) => {
       const dateStr = getDateString(date);
       const dayOfWeek = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"][date.getDay()];
@@ -5028,6 +5047,7 @@ const HabitGoalTracker = () => {
       
       return activeHabits.map(habit => ({
         ...habit,
+        // FIXED: Access the .completed property from the completion object
         completed: habitCompletions[dateStr]?.[habit.id]?.completed || false
       }));
     };
@@ -5039,7 +5059,7 @@ const HabitGoalTracker = () => {
       const completed = habitsForDate.filter(h => h.completed).length;
       return Math.round((completed / habitsForDate.length) * 100);
     };
-
+  
     // Helper functions for month and year views
     const getWeeksInMonth = (date) => {
       const year = date.getFullYear();
@@ -5067,7 +5087,7 @@ const HabitGoalTracker = () => {
       
       return weeks;
     };
-
+  
     const getMonthsInYear = (year) => {
       const months = [];
       for (let i = 0; i < 12; i++) {
@@ -5075,7 +5095,7 @@ const HabitGoalTracker = () => {
       }
       return months;
     };
-
+  
     const getWeeklyStats = (startDate, endDate) => {
       const days = [];
       const current = new Date(startDate);
@@ -5105,7 +5125,7 @@ const HabitGoalTracker = () => {
         days: days.length
       };
     };
-
+  
     const getMonthlyStats = (month, year) => {
       const weeks = getWeeksInMonth(new Date(year, month, 1));
       const weeklyStats = weeks.map(week => getWeeklyStats(week.start, week.end));
@@ -5126,7 +5146,7 @@ const HabitGoalTracker = () => {
         weeks: weeklyStats
       };
     };
-
+  
     const getYearlyStats = (year) => {
       const months = getMonthsInYear(year);
       const monthlyStats = months.map(month => getMonthlyStats(month.getMonth(), year));
@@ -5158,20 +5178,33 @@ const HabitGoalTracker = () => {
       }
       return days;
     };
-
+  
     // Get routine completions for a specific date
     const getRoutineCompletionsForDate = (date) => {
       const dateStr = getDateString(date);
       return routineCompletions[dateStr] || {};
     };
-
-    // Calculate routine statistics
-    const getRoutineStats = () => {
-      const allRoutineCompletions = Object.values(routineCompletions).flatMap(dayCompletions => 
-        Object.values(dayCompletions)
-      );
+  
+    // FIXED: Calculate routine statistics with time period filtering to prevent flashing
+    const getRoutineStats = (startDate = null, endDate = null) => {
+      let filteredCompletions;
       
-      if (allRoutineCompletions.length === 0) {
+      if (startDate && endDate) {
+        // Filter by date range to prevent processing all historical data
+        filteredCompletions = Object.keys(routineCompletions)
+          .filter(dateStr => {
+            const date = new Date(dateStr);
+            return date >= startDate && date <= endDate;
+          })
+          .flatMap(dateStr => Object.values(routineCompletions[dateStr]));
+      } else {
+        // Fallback to all data if no date range provided
+        filteredCompletions = Object.values(routineCompletions).flatMap(dayCompletions => 
+          Object.values(dayCompletions)
+        );
+      }
+      
+      if (filteredCompletions.length === 0) {
         return {
           totalRoutines: 0,
           completedRoutines: 0,
@@ -5179,25 +5212,50 @@ const HabitGoalTracker = () => {
           totalTime: 0
         };
       }
-
-      const completedRoutines = allRoutineCompletions.filter(r => r.completed);
-      const totalTime = allRoutineCompletions.reduce((sum, r) => sum + (r.totalTime || 0), 0);
+  
+      const completedRoutines = filteredCompletions.filter(r => r.completed);
+      const totalTime = filteredCompletions.reduce((sum, r) => sum + (r.totalDuration || 0), 0);
       const averageTime = completedRoutines.length > 0 
-        ? completedRoutines.reduce((sum, r) => sum + (r.totalTime || 0), 0) / completedRoutines.length 
+        ? completedRoutines.reduce((sum, r) => sum + (r.totalDuration || 0), 0) / completedRoutines.length 
         : 0;
-
+  
       return {
-        totalRoutines: allRoutineCompletions.length,
+        totalRoutines: filteredCompletions.length,
         completedRoutines: completedRoutines.length,
         averageTime: Math.round(averageTime * 10) / 10,
         totalTime: Math.round(totalTime * 10) / 10
       };
     };
     
+    // Memoized calculations to prevent unnecessary re-computation and flashing
     const selectedDateStr = getDateString(selectedDate);
     const habitsForSelectedDate = getHabitsForDate(selectedDate);
     const completionRate = getCompletionRate(selectedDate);
     const last7Days = getLast7Days();
+    
+    // Memoized routine stats based on view mode to prevent flashing
+    const routineStats = useMemo(() => {
+      switch (viewMode) {
+        case 'day':
+          return getRoutineStats(selectedDate, selectedDate);
+        case 'week':
+          const weekStart = new Date(selectedDate);
+          weekStart.setDate(weekStart.getDate() - weekStart.getDay());
+          const weekEnd = new Date(weekStart);
+          weekEnd.setDate(weekEnd.getDate() + 6);
+          return getRoutineStats(weekStart, weekEnd);
+        case 'month':
+          const monthStart = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1);
+          const monthEnd = new Date(selectedDate.getFullYear(), selectedDate.getMonth() + 1, 0);
+          return getRoutineStats(monthStart, monthEnd);
+        case 'year':
+          const yearStart = new Date(selectedDate.getFullYear(), 0, 1);
+          const yearEnd = new Date(selectedDate.getFullYear(), 11, 31);
+          return getRoutineStats(yearStart, yearEnd);
+        default:
+          return getRoutineStats();
+      }
+    }, [viewMode, selectedDate, routineCompletions]);
     
     return (
       <div className="space-y-4">
@@ -5229,8 +5287,8 @@ const HabitGoalTracker = () => {
           ))}
         </div>
         
-        
-        {viewMode === 'day' ? (
+        {/* DAY VIEW */}
+        {viewMode === 'day' && (
           <>
             {/* Date Navigator */}
             <div className="bg-white rounded-xl shadow-md p-4">
@@ -5244,16 +5302,10 @@ const HabitGoalTracker = () => {
                 
                 <div className="text-center">
                   <p className="text-lg font-bold text-[#333333]">
-                    {viewMode === 'day' && selectedDate.toLocaleDateString('en-US', { weekday: 'long' })}
-                    {viewMode === 'week' && `Week of ${selectedDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`}
-                    {viewMode === 'month' && selectedDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
-                    {viewMode === 'year' && selectedDate.getFullYear().toString()}
+                    {selectedDate.toLocaleDateString('en-US', { weekday: 'long' })}
                   </p>
                   <p className="text-sm text-[#333333] opacity-70 font-mono">
-                    {viewMode === 'day' && selectedDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
-                    {viewMode === 'week' && selectedDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                    {viewMode === 'month' && selectedDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
-                    {viewMode === 'year' && selectedDate.getFullYear().toString()}
+                    {selectedDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
                   </p>
                 </div>
                 
@@ -5265,7 +5317,8 @@ const HabitGoalTracker = () => {
                   <ChevronRight 
                     size={24} 
                     strokeWidth={2.5} 
-                    className={getDateString(selectedDate) === getDateString(new Date()) ? "text-[#333333] opacity-30" : "text-[#333333]"} 
+                    className={getDateString(selectedDate) === getDateString(new Date()) ? 
+                      "text-[#333333] opacity-30" : "text-[#333333]"} 
                   />
                 </button>
               </div>
@@ -5311,49 +5364,25 @@ const HabitGoalTracker = () => {
               if (routineIds.length > 0) {
                 return (
                   <div className="bg-white rounded-xl shadow-md p-4">
-                    <h3 className="font-bold text-[#333333] mb-3 text-sm uppercase tracking-wide">Routine Completions</h3>
+                    <h3 className="font-bold text-[#333333] mb-3 text-sm uppercase tracking-wide">Routines Completed</h3>
                     <div className="space-y-2">
                       {routineIds.map(routineId => {
-                        const routine = routines.find(r => r.id === parseInt(routineId));
+                        const routine = routines.find(r => r.id === routineId);
                         const completion = dayRoutineCompletions[routineId];
-                        if (!routine || !completion) return null;
+                        
+                        if (!routine) return null;
                         
                         return (
-                          <div key={routineId} className="p-3 bg-stone-50 rounded-lg">
-                            <div className="flex items-center justify-between mb-2">
-                              <span className="font-medium text-[#333333]">{routine.name}</span>
-                              <span className={`text-xs px-2 py-1 rounded font-mono ${
-                                completion.completed 
-                                  ? 'bg-[#4b5320]/30 text-[#4b5320]' 
-                                  : 'bg-orange-200 text-orange-800'
-                              }`}>
-                                {completion.completed ? 'Completed' : 'Abandoned'}
-                              </span>
+                          <div key={routineId} className="flex items-center justify-between p-3 bg-stone-50 rounded-lg">
+                            <div>
+                              <p className="font-bold text-[#333333] text-sm">{routine.name}</p>
+                              <p className="text-xs text-[#333333] opacity-70 font-mono">
+                                {completion.totalDuration ? `${Math.round(completion.totalDuration * 10) / 10}m` : 'N/A'}
+                              </p>
                             </div>
-                            <div className="text-sm text-[#333333] opacity-70">
-                              <div className="flex items-center gap-4 mb-1">
-                                <p>Actual: {Math.round(completion.totalTime * 10) / 10}m</p>
-                                {completion.estimatedTime && (
-                                  <p>Estimated: {completion.estimatedTime}m</p>
-                                )}
-                                {completion.estimatedTime && (
-                                  <p className={`font-medium ${
-                                    completion.totalTime <= completion.estimatedTime 
-                                      ? 'text-[#4b5320]' 
-                                      : 'text-orange-600'
-                                  }`}>
-                                    {completion.totalTime <= completion.estimatedTime ? '✓' : '⚠'} 
-                                    {Math.round(((completion.totalTime / completion.estimatedTime) - 1) * 100)}%
-                                  </p>
-                                )}
-                              </div>
-                              {completion.startTime && (
-                                <p>Started: {new Date(completion.startTime).toLocaleTimeString()}</p>
-                              )}
-                              {completion.endTime && (
-                                <p>Finished: {new Date(completion.endTime).toLocaleTimeString()}</p>
-                              )}
-                            </div>
+                            {completion.completed && (
+                              <CheckSquare className="text-[#4b5320]" size={20} strokeWidth={2.5} />
+                            )}
                           </div>
                         );
                       })}
@@ -5363,59 +5392,89 @@ const HabitGoalTracker = () => {
               }
               return null;
             })()}
-          </>
-        ) : viewMode === 'week' ? (
-          <>
-            {/* Week Summary */}
+            
+            {/* Habits List */}
             <div className="bg-white rounded-xl shadow-md p-4">
-              <h3 className="font-bold text-[#333333] mb-3 text-sm uppercase tracking-wide">Week Summary</h3>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="text-center p-3 bg-stone-50 rounded-lg">
-                  <p className="text-2xl font-bold text-[#333333] font-mono">
-                    {Math.round(last7Days.reduce((sum, date) => sum + getCompletionRate(date), 0) / 7)}%
-                  </p>
-                  <p className="text-xs text-[#333333] opacity-70 uppercase tracking-wider mt-1">Avg Rate</p>
-                </div>
-                <div className="text-center p-3 bg-stone-50 rounded-lg">
-                  <p className="text-2xl font-bold text-[#333333] font-mono">
-                    {last7Days.filter(date => getCompletionRate(date) === 100).length}
-                  </p>
-                  <p className="text-xs text-[#333333] opacity-70 uppercase tracking-wider mt-1">Perfect Days</p>
-                </div>
+              <h3 className="font-bold text-[#333333] mb-3 text-sm uppercase tracking-wide">Habits</h3>
+              <div className="space-y-2">
+                {habitsForSelectedDate.length === 0 ? (
+                  <p className="text-[#333333] opacity-50 text-sm text-center py-4">No habits scheduled for this day</p>
+                ) : (
+                  habitsForSelectedDate.map(habit => (
+                    <div key={habit.id} className="flex items-center justify-between p-3 bg-stone-50 rounded-lg">
+                      <div className="flex items-center gap-3">
+                        {habit.completed ? (
+                          <CheckSquare className="text-[#4b5320]" size={20} strokeWidth={2.5} />
+                        ) : (
+                          <Circle className="text-[#333333] opacity-40" size={20} strokeWidth={2.5} />
+                        )}
+                        <div>
+                          <p className={`text-sm ${habit.completed ? 'text-[#333333] line-through opacity-70' : 'text-[#333333] font-medium'}`}>
+                            {habit.name}
+                          </p>
+                          {habit.duration && (
+                            <p className="text-xs text-[#333333] opacity-70 font-mono">{habit.duration}m</p>
+                          )}
+                        </div>
+                      </div>
+                      {habit.completed && habitCompletions[selectedDateStr]?.[habit.id]?.duration && (
+                        <span className="text-xs text-[#333333] opacity-70 font-mono">
+                          {Math.round(habitCompletions[selectedDateStr][habit.id].duration * 10) / 10}m
+                        </span>
+                      )}
+                    </div>
+                  ))
+                )}
               </div>
             </div>
-
-            {/* Routine Statistics */}
+          </>
+        )}
+        
+        {/* WEEK VIEW */}
+        {viewMode === 'week' && (
+          <>
+            {/* Week Navigator */}
             <div className="bg-white rounded-xl shadow-md p-4">
-              <h3 className="font-bold text-[#333333] mb-3 text-sm uppercase tracking-wide">Routine Statistics</h3>
-              {(() => {
-                const stats = getRoutineStats();
-                return (
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="text-center p-3 bg-stone-50 rounded-lg">
-                      <p className="text-2xl font-bold text-[#333333] font-mono">
-                        {stats.completedRoutines}/{stats.totalRoutines}
-                      </p>
-                      <p className="text-xs text-[#333333] opacity-70 uppercase tracking-wider mt-1">Completed</p>
-                    </div>
-                    <div className="text-center p-3 bg-stone-50 rounded-lg">
-                      <p className="text-2xl font-bold text-[#333333] font-mono">
-                        {stats.averageTime}m
-                      </p>
-                      <p className="text-xs text-[#333333] opacity-70 uppercase tracking-wider mt-1">Avg Time</p>
-                    </div>
-                  </div>
-                );
-              })()}
+              <div className="flex items-center justify-between mb-3">
+                <button
+                  onClick={() => changeDate(-1)}
+                  className="p-2 hover:bg-stone-100 rounded-lg transition-colors"
+                >
+                  <ChevronLeft size={24} strokeWidth={2.5} className="text-[#333333]" />
+                </button>
+                
+                <div className="text-center">
+                  <p className="text-lg font-bold text-[#333333]">
+                    Week of {selectedDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                  </p>
+                  <p className="text-sm text-[#333333] opacity-70 font-mono">
+                    {selectedDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                  </p>
+                </div>
+                
+                <button
+                  onClick={() => changeDate(1)}
+                  className="p-2 hover:bg-stone-100 rounded-lg transition-colors"
+                >
+                  <ChevronRight size={24} strokeWidth={2.5} className="text-[#333333]" />
+                </button>
+              </div>
+              
+              <button
+                onClick={() => setSelectedDate(new Date())}
+                className="w-full py-2 bg-stone-100 text-[#333333] rounded-lg hover:bg-stone-200 font-bold uppercase text-xs tracking-wider transition-colors"
+              >
+                This Week
+              </button>
             </div>
-
-            {/* Week View */}
+            
+            {/* Week Progress */}
             <div className="bg-white rounded-xl shadow-md p-4">
-              <h3 className="font-bold text-[#333333] mb-4 text-sm uppercase tracking-wide">Last 7 Days</h3>
+              <h3 className="font-bold text-[#333333] mb-3 text-sm uppercase tracking-wide">7 Day Overview</h3>
               <div className="space-y-3">
                 {last7Days.map((date, index) => {
-                  const dateHabits = getHabitsForDate(date);
                   const rate = getCompletionRate(date);
+                  const dateHabits = getHabitsForDate(date);
                   const isToday = getDateString(date) === getDateString(new Date());
                   
                   return (
@@ -5447,9 +5506,85 @@ const HabitGoalTracker = () => {
                 })}
               </div>
             </div>
+            
+            {/* Week Summary */}
+            <div className="bg-white rounded-xl shadow-md p-4">
+              <h3 className="font-bold text-[#333333] mb-3 text-sm uppercase tracking-wide">Week Summary</h3>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="text-center p-3 bg-stone-50 rounded-lg">
+                  <p className="text-2xl font-bold text-[#333333] font-mono">
+                    {Math.round(last7Days.reduce((sum, date) => sum + getCompletionRate(date), 0) / 7)}%
+                  </p>
+                  <p className="text-xs text-[#333333] opacity-70 uppercase tracking-wider mt-1">Avg Rate</p>
+                </div>
+                <div className="text-center p-3 bg-stone-50 rounded-lg">
+                  <p className="text-2xl font-bold text-[#333333] font-mono">
+                    {last7Days.filter(date => getCompletionRate(date) === 100).length}
+                  </p>
+                  <p className="text-xs text-[#333333] opacity-70 uppercase tracking-wider mt-1">Perfect Days</p>
+                </div>
+              </div>
+            </div>
+            
+            {/* Routine Statistics */}
+            <div className="bg-white rounded-xl shadow-md p-4">
+              <h3 className="font-bold text-[#333333] mb-3 text-sm uppercase tracking-wide">Routine Statistics</h3>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="text-center p-3 bg-stone-50 rounded-lg">
+                  <p className="text-2xl font-bold text-[#333333] font-mono">
+                    {routineStats.completedRoutines}/{routineStats.totalRoutines}
+                  </p>
+                  <p className="text-xs text-[#333333] opacity-70 uppercase tracking-wider mt-1">Completed</p>
+                </div>
+                <div className="text-center p-3 bg-stone-50 rounded-lg">
+                  <p className="text-2xl font-bold text-[#333333] font-mono">
+                    {routineStats.averageTime}m
+                  </p>
+                  <p className="text-xs text-[#333333] opacity-70 uppercase tracking-wider mt-1">Avg Time</p>
+                </div>
+              </div>
+            </div>
           </>
-        ) : viewMode === 'month' ? (
+        )}
+        
+        {/* MONTH VIEW */}
+        {viewMode === 'month' && (
           <>
+            {/* Month Navigator */}
+            <div className="bg-white rounded-xl shadow-md p-4">
+              <div className="flex items-center justify-between mb-3">
+                <button
+                  onClick={() => changeDate(-1)}
+                  className="p-2 hover:bg-stone-100 rounded-lg transition-colors"
+                >
+                  <ChevronLeft size={24} strokeWidth={2.5} className="text-[#333333]" />
+                </button>
+                
+                <div className="text-center">
+                  <p className="text-lg font-bold text-[#333333]">
+                    {selectedDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+                  </p>
+                  <p className="text-sm text-[#333333] opacity-70 font-mono">
+                    {selectedDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+                  </p>
+                </div>
+                
+                <button
+                  onClick={() => changeDate(1)}
+                  className="p-2 hover:bg-stone-100 rounded-lg transition-colors"
+                >
+                  <ChevronRight size={24} strokeWidth={2.5} className="text-[#333333]" />
+                </button>
+              </div>
+              
+              <button
+                onClick={() => setSelectedDate(new Date())}
+                className="w-full py-2 bg-stone-100 text-[#333333] rounded-lg hover:bg-stone-200 font-bold uppercase text-xs tracking-wider transition-colors"
+              >
+                This Month
+              </button>
+            </div>
+            
             {/* Month Summary */}
             {(() => {
               const monthStats = getMonthlyStats(selectedDate.getMonth(), selectedDate.getFullYear());
@@ -5469,31 +5604,26 @@ const HabitGoalTracker = () => {
                 </div>
               );
             })()}
-
+            
             {/* Routine Statistics */}
             <div className="bg-white rounded-xl shadow-md p-4">
               <h3 className="font-bold text-[#333333] mb-3 text-sm uppercase tracking-wide">Routine Statistics</h3>
-              {(() => {
-                const stats = getRoutineStats();
-                return (
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="text-center p-3 bg-stone-50 rounded-lg">
-                      <p className="text-2xl font-bold text-[#333333] font-mono">
-                        {stats.completedRoutines}/{stats.totalRoutines}
-                      </p>
-                      <p className="text-xs text-[#333333] opacity-70 uppercase tracking-wider mt-1">Completed</p>
-                    </div>
-                    <div className="text-center p-3 bg-stone-50 rounded-lg">
-                      <p className="text-2xl font-bold text-[#333333] font-mono">
-                        {stats.averageTime}m
-                      </p>
-                      <p className="text-xs text-[#333333] opacity-70 uppercase tracking-wider mt-1">Avg Time</p>
-                    </div>
-                  </div>
-                );
-              })()}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="text-center p-3 bg-stone-50 rounded-lg">
+                  <p className="text-2xl font-bold text-[#333333] font-mono">
+                    {routineStats.completedRoutines}/{routineStats.totalRoutines}
+                  </p>
+                  <p className="text-xs text-[#333333] opacity-70 uppercase tracking-wider mt-1">Completed</p>
+                </div>
+                <div className="text-center p-3 bg-stone-50 rounded-lg">
+                  <p className="text-2xl font-bold text-[#333333] font-mono">
+                    {routineStats.averageTime}m
+                  </p>
+                  <p className="text-xs text-[#333333] opacity-70 uppercase tracking-wider mt-1">Avg Time</p>
+                </div>
+              </div>
             </div>
-
+            
             {/* Month View - Week by Week */}
             <div className="bg-white rounded-xl shadow-md p-4">
               <h3 className="font-bold text-[#333333] mb-4 text-sm uppercase tracking-wide">Weeks in {selectedDate.toLocaleDateString('en-US', { month: 'long' })}</h3>
@@ -5535,8 +5665,46 @@ const HabitGoalTracker = () => {
               </div>
             </div>
           </>
-        ) : viewMode === 'year' ? (
+        )}
+        
+        {/* YEAR VIEW */}
+        {viewMode === 'year' && (
           <>
+            {/* Year Navigator */}
+            <div className="bg-white rounded-xl shadow-md p-4">
+              <div className="flex items-center justify-between mb-3">
+                <button
+                  onClick={() => changeDate(-1)}
+                  className="p-2 hover:bg-stone-100 rounded-lg transition-colors"
+                >
+                  <ChevronLeft size={24} strokeWidth={2.5} className="text-[#333333]" />
+                </button>
+                
+                <div className="text-center">
+                  <p className="text-lg font-bold text-[#333333]">
+                    {selectedDate.getFullYear()}
+                  </p>
+                  <p className="text-sm text-[#333333] opacity-70 font-mono">
+                    {selectedDate.getFullYear()}
+                  </p>
+                </div>
+                
+                <button
+                  onClick={() => changeDate(1)}
+                  className="p-2 hover:bg-stone-100 rounded-lg transition-colors"
+                >
+                  <ChevronRight size={24} strokeWidth={2.5} className="text-[#333333]" />
+                </button>
+              </div>
+              
+              <button
+                onClick={() => setSelectedDate(new Date())}
+                className="w-full py-2 bg-stone-100 text-[#333333] rounded-lg hover:bg-stone-200 font-bold uppercase text-xs tracking-wider transition-colors"
+              >
+                This Year
+              </button>
+            </div>
+            
             {/* Year Summary */}
             {(() => {
               const yearStats = getYearlyStats(selectedDate.getFullYear());
@@ -5556,31 +5724,26 @@ const HabitGoalTracker = () => {
                 </div>
               );
             })()}
-
+            
             {/* Routine Statistics */}
             <div className="bg-white rounded-xl shadow-md p-4">
               <h3 className="font-bold text-[#333333] mb-3 text-sm uppercase tracking-wide">Routine Statistics</h3>
-              {(() => {
-                const stats = getRoutineStats();
-                return (
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="text-center p-3 bg-stone-50 rounded-lg">
-                      <p className="text-2xl font-bold text-[#333333] font-mono">
-                        {stats.completedRoutines}/{stats.totalRoutines}
-                      </p>
-                      <p className="text-xs text-[#333333] opacity-70 uppercase tracking-wider mt-1">Completed</p>
-                    </div>
-                    <div className="text-center p-3 bg-stone-50 rounded-lg">
-                      <p className="text-2xl font-bold text-[#333333] font-mono">
-                        {stats.averageTime}m
-                      </p>
-                      <p className="text-xs text-[#333333] opacity-70 uppercase tracking-wider mt-1">Avg Time</p>
-                    </div>
-                  </div>
-                );
-              })()}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="text-center p-3 bg-stone-50 rounded-lg">
+                  <p className="text-2xl font-bold text-[#333333] font-mono">
+                    {routineStats.completedRoutines}/{routineStats.totalRoutines}
+                  </p>
+                  <p className="text-xs text-[#333333] opacity-70 uppercase tracking-wider mt-1">Completed</p>
+                </div>
+                <div className="text-center p-3 bg-stone-50 rounded-lg">
+                  <p className="text-2xl font-bold text-[#333333] font-mono">
+                    {routineStats.averageTime}m
+                  </p>
+                  <p className="text-xs text-[#333333] opacity-70 uppercase tracking-wider mt-1">Avg Time</p>
+                </div>
+              </div>
             </div>
-
+            
             {/* Year View - Month by Month */}
             <div className="bg-white rounded-xl shadow-md p-4">
               <h3 className="font-bold text-[#333333] mb-4 text-sm uppercase tracking-wide">Months in {selectedDate.getFullYear()}</h3>
@@ -5599,7 +5762,7 @@ const HabitGoalTracker = () => {
                               {month.toLocaleDateString('en-US', { month: 'long' })}
                             </p>
                             <p className="text-xs text-[#333333] opacity-70 font-mono">
-                              {monthStats.perfectDays} perfect days
+                              {month.toLocaleDateString('en-US', { year: 'numeric' })}
                             </p>
                           </div>
                           <div className="text-right">
@@ -5622,7 +5785,7 @@ const HabitGoalTracker = () => {
               </div>
             </div>
           </>
-        ) : null}
+        )}
       </div>
     );
   };
